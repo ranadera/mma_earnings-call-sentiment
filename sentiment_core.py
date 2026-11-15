@@ -34,7 +34,7 @@ def lm_path(path='LM_MasterDictionary.csv'):
     return os.path.join(list(spec.submodule_search_locations)[0], 'static', 'LM.csv')
 
 
-def load_sector_map(path='sector_map.csv'):
+def load_sector_map(path='data/sector_map.csv'):
     if not os.path.exists(path):
         return {}
     m = pd.read_csv(path, dtype=str).dropna()
@@ -176,11 +176,28 @@ def drop_boilerplate(text):
     return ' '.join(s for s in split_sentences(text) if not re.search(BOILERPLATE, s, re.I))
 
 
-def lm_counts(text, lm):
+def load_sector_lexicon(path='data/sector_lexicon.csv'):
+    """Sector-specific neutral terms: words (or two-word phrases) that the finance dictionary
+    counts as positive or negative but are routine jargon in that sector."""
+    if not os.path.exists(path):
+        return pd.DataFrame(columns=['sector', 'term', 'reason'])
+    return pd.read_csv(path)
+
+
+def neutral_terms(lexicon, sector):
+    rows = lexicon[lexicon['sector'].isin(['All', sector])] if sector else lexicon[lexicon['sector'] == 'All']
+    words = {t.lower() for t in rows['term'] if ' ' not in t}
+    pairs = {tuple(t.lower().split()) for t in rows['term'] if len(t.split()) == 2}
+    return {'words': words, 'pairs': pairs}
+
+
+def lm_counts(text, lm, neutral=None):
     tokens = re.findall(r"[a-z]+(?:'[a-z]+)?", text.lower())
     pos = neg = unc = 0
     pos_words, neg_words = [], []
     for i, w in enumerate(tokens):
+        if neutral and (w in neutral['words'] or (i > 0 and (tokens[i - 1], w) in neutral['pairs'])):
+            continue
         if w in lm['pos']:
             if any(t in NEGATORS for t in tokens[max(0, i - 3):i]):
                 neg += 1
@@ -197,12 +214,15 @@ def lm_counts(text, lm):
             'pos_words': pos_words, 'neg_words': neg_words}
 
 
-def score_turns(turns, lm):
+def score_turns(turns, lm, neutral=None):
     turns = turns.copy()
     turns['clean'] = turns['text'].apply(drop_boilerplate)
     turns = turns[(turns['role'] != 'operator') & (turns['clean'].str.split().str.len() > 0)].reset_index(drop=True)
     counts = pd.DataFrame([lm_counts(t, lm) for t in turns['clean']])
     turns = pd.concat([turns, counts], axis=1)
+    if neutral is not None:
+        adj = pd.DataFrame([lm_counts(t, lm, neutral) for t in turns['clean']])
+        turns['adj_pos'], turns['adj_neg'] = adj['lm_pos'], adj['lm_neg']
     sents = turns['clean'].apply(split_sentences)
     turns['n_sent'] = sents.str.len()
     turns['vader'] = sents.apply(lambda s: np.mean([vader.polarity_scores(x)['compound'] for x in s]) if s else 0)
@@ -261,7 +281,11 @@ def score_call(turns, benchmark, sector=None):
     peers = benchmark[benchmark['sector'] == sector] if sector else benchmark
     sector_score = float(zscore(composite, peers['composite'])) if len(peers) > 2 else np.nan
 
-    res = {'words': overall['words'], 'lm_tone': overall['lm_tone'], 'vader': overall['vader'],
+    if 'adj_pos' in turns.columns and overall['words']:
+        adj_tone = (turns['adj_pos'].sum() - turns['adj_neg'].sum()) / overall['words'] * 100
+    else:
+        adj_tone = np.nan
+    res = {'words': overall['words'], 'lm_tone': overall['lm_tone'], 'lm_tone_sector': adj_tone, 'vader': overall['vader'],
            'textblob': overall['textblob'], 'lm_uncertainty': overall['lm_uncertainty'],
            'composite': composite, 'signal': signal, 'sector_score': sector_score,
            'pres_tone': pres, 'qa_mgmt_tone': qa_m, 'analyst_tone': ana,

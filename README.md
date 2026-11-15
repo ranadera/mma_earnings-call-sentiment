@@ -1,58 +1,43 @@
-# Earnings Call Sentiment Analyzer
+# Quanta-Mentals · Earnings Call Sentiment
 
-**MMA 823 Analytics for Financial Markets · Smith School of Business, Queen's University**
+MMA 823 Analytics for Financial Markets, Smith School of Business, Queen's University.
 
-Upload an earnings call transcript and the app measures how management talks: the overall tone, how tone changes from the scripted presentation to the live Q&A with analysts, how tone moves through the call, and how well management holds its message under questioning. Each call is placed against a benchmark of real earnings calls and flagged as **Positive**, **Neutral** or **Negative**.
+A research app that scores the language of earnings calls, compares it with a benchmark of 22 calls (Bank and Tech), and checks how the stock moved around each call.
 
-**Live demo:** _add your Streamlit Cloud link here_
+## Pages
 
-## How it works
-
-1. **Read.** The transcript (Bloomberg or LSEG PDF, or pasted text) is split by speaker into the prepared presentation, analyst questions and management answers. Legal disclaimers and operator remarks are removed.
-2. **Score.** Three methods score the language:
-   - the **Loughran-McDonald** finance dictionary (positive, negative and uncertainty words), the main measure;
-   - **VADER** and **TextBlob**, two general-purpose sentiment tools used as a cross-check.
-3. **Compare.** The scores are standardised against the benchmark calls in `call_sentiment.csv`, ideally against calls from the same sector.
-
-Key measures:
-
-| Measure | Meaning |
+| Page | Project part |
 |---|---|
-| Tone | Positive minus negative finance words per 100 words |
-| Overall score | Average of the three methods on a common scale (0 = average benchmark call) |
-| Tone change into Q&A | Management tone in live answers minus tone in the scripted presentation |
-| Management conviction | Answers more positive than the questions, little hedging, tone holding up in the Q&A |
-
-## Sector coverage (please read)
-
-The method works for earnings calls from **any sector**. The comparison benchmark is currently **calibrated on Bank and Tech calls**, so results for those sectors are the most reliable. A call from another sector is scored the same way but compared with all benchmark calls, and its relative scores should be read with care. Expanding the benchmark to more sectors is the next step: add tickers to `sector_map.csv` and scored calls to `call_sentiment.csv`.
-
-## Method notes and limitations
-
-- **Dictionary adapted to calls.** Loughran-McDonald counts *question(s)* as negative because in annual reports it signals doubt. On a call it is neutral ("my question is..."), so it is removed.
-- **Words, not meaning.** Dictionary methods miss context and sarcasm; only simple negation ("not strong") is handled.
-- **Text only.** Voice, pauses and hesitation are not captured.
-- **Small benchmark.** 22 calls (18 Tech, 4 Bank), so classifications are relative to this sample.
-- **Not investment advice.** The project also tests whether tone relates to post-call stock returns; tone alone is not a trading signal.
-
-## Data
-
-The Bloomberg transcripts used to build the benchmark are licensed and are **not included** in this repository. Only derived scores are published (`call_sentiment.csv`, `segment_tone.csv`). To try the app, upload a transcript you have access to or paste the text of any earnings call.
+| Home | The brief, the four-step method, and the headline findings |
+| Analyze a call | Part 5. Upload or paste any transcript to get its tone, a sector-adjusted tone, how tone changes into the Q&A, management conviction, and the live price reaction |
+| Benchmark explorer | Parts 2–3. Rankings, how the methods agree, scripted vs. live tone, tone through the call, analyst pushback |
+| Market reaction | Part 4. Event study (±21 trading days vs. SPY or a sector ETF), correlations, and a long-short test |
+| Stock reports | Part 1. One-page profile: business, valuation ratios, price vs. S&P 500, risk, and call sentiment |
+| Method & decisions | Methods, measures, sector dictionaries, executive decisions, assumptions, limitations, next steps, and a glossary |
 
 ## Run locally
 
-```bash
+```
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Files
+## Structure
 
-| File | Purpose |
-|---|---|
-| `app.py` | Streamlit app |
-| `sentiment_core.py` | Transcript parsing and scoring (same logic as the project notebook) |
-| `call_sentiment.csv` | Benchmark scores, one row per call |
-| `segment_tone.csv` | Benchmark tone for each tenth of each call |
-| `sector_map.csv` | Ticker to sector; add rows for new companies |
-| `.streamlit/config.toml` | Colours |
+```
+app.py              page router
+ui.py               styling, components and glossary
+data_access.py      cached data loaders
+market.py           Yahoo Finance prices and event-study maths
+sentiment_core.py   transcript parsing and scoring (same as the notebooks)
+views/              one file per page
+data/               benchmark scores, sector map, sector dictionary
+```
+
+To add a sector, add its tickers to `data/sector_map.csv` and its routine jargon to `data/sector_lexicon.csv`.
+
+## Data and licensing
+
+Bloomberg and LSEG transcripts are licensed and are **not** included in this repository. Only derived scores are published. Prices come live from Yahoo Finance. If you need the app to work offline, add a `data/prices.csv` file (date index, one column per ticker).
+
+Research prototype. Not investment advice.

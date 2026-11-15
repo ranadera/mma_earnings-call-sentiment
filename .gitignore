@@ -4,7 +4,7 @@ transcripts/
 turn_sentiment.csv
 LM_MasterDictionary.csv
 # Market data caches
-prices.csv
+/prices.csv
 report_prices.csv
 company_info.json
 bloomberg_inputs.csv

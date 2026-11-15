@@ -168,6 +168,15 @@ a.qm-tile .badge {{ align-self: flex-start; font-size: 10.5px; font-weight: 900;
 .qm-side-foot {{ color: {MUTED}; font-size: 12.3px; border-top: 1px solid {LINE}; padding-top: 10px; margin-top: 16px; line-height: 1.45; }}
 [data-testid="stFileUploaderDropzone"] {{ background: #fff; border: 1.5px dashed #9FB0C8; border-radius: 6px; }}
 
+/* top takeaways */
+.qm-takes {{ background: {SMITH_BLUE}; border-radius: 8px; padding: 16px 18px 18px; margin: 4px 0 18px; border-bottom: 4px solid {GOLD}; }}
+.qm-takes-h {{ color: {GOLD}; font-weight: 900; font-size: 12.5px; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 12px; }}
+.qm-takes-g {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }}
+.qm-take {{ background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); border-radius: 6px; padding: 12px 14px; position: relative; }}
+.qm-take .n {{ position: absolute; top: 10px; right: 12px; color: {GOLD}; font-weight: 900; font-size: 22px; opacity: .9; }}
+.qm-take h5 {{ color: #fff; margin: 0 28px 6px 0; font-size: 15.5px; font-weight: 900; padding: 0; }}
+.qm-take p {{ color: #D5DDEB; margin: 0; font-size: 13.6px; line-height: 1.5; }}
+.qm-take b {{ color: #fff; }}
 .qm-foot {{ color: {MUTED}; font-size: 12.5px; border-top: 1px solid {LINE}; margin-top: 40px; padding-top: 12px; }}
 div[data-testid="stExpander"] details {{ background: #fff; border-radius: 6px; border: 1px solid {LINE}; }}
 div[data-testid="stExpander"] summary p {{ font-weight: 700; color: {SMITH_BLUE}; }}

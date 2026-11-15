@@ -131,6 +131,44 @@ st.markdown(f'<div class="qm-signal"><div class="pill" style="background:{color}
             f'<b>{pct:.0%}</b> of {esc(peer_word)}.</div></div>', unsafe_allow_html=True)
 
 
+def fin(x):
+    return x is not None and np.isfinite(x)
+
+
+avg_tone = peers['lm_tone'].mean()
+takes = [(f'{res["signal"]} overall',
+          (f'Less positive than <b>every one</b> of the {esc(peer_word.removeprefix("all "))}. Tone' if pct == 0 else f'More positive than <b>every one</b> of the {esc(peer_word.removeprefix("all "))}. Tone' if pct == 1 else f'More positive than <b>{pct:.0%}</b> of {esc(peer_word)}. Tone')
+          + f' of <b>{res["lm_tone"]:.2f}</b> net positive words per 100, '
+          f'against an average of {avg_tone:.2f}.'
+          + (f' Ignoring routine {esc(lex_sector.lower())} jargon, it is <b>{res["lm_tone_sector"]:.2f}</b>.' if lex_sector and fin(res['lm_tone_sector']) and abs(res['lm_tone_sector'] - res['lm_tone']) > 0.05 else ''))]
+if fin(res['tone_shift']):
+    fell_share = (peers['tone_shift'] < 0).mean()
+    up = res['tone_shift'] >= 0
+    hedge = ''
+    if fin(res['hedging']):
+        hedge = f' Uncertain words {"rose" if res["hedging"] > 0 else "fell"} by {abs(res["hedging"]):.2f} per 100 in the live answers.'
+    takes.append(('Script vs. live answers',
+                  f'Tone {"<b>held up</b>" if up else "<b>softened</b>"} from the scripted remarks ({res["pres_tone"]:.2f}) to the live answers '
+                  f'({res["qa_mgmt_tone"]:.2f}). For comparison, tone fell in {fell_share:.0%} of {esc(peer_word)}.{hedge}'))
+else:
+    takes.append(('Script vs. live answers', 'Speakers could not be identified, so the scripted remarks and live answers cannot be compared. '
+                  'Use a Bloomberg or LSEG transcript for this measure.'))
+if fin(res['analyst_neg_rate']):
+    a_avg = peers['analyst_neg_rate'].mean()
+    tough = res['analyst_neg_rate'] > a_avg
+    conv = res.get('conviction_score', np.nan)
+    takes.append(('Analysts and conviction',
+                  f'Analyst questions were <b>{"more" if tough else "less"} critical</b> than usual ({res["analyst_neg_rate"]:.2f} vs. {a_avg:.2f} negative words per 100).'
+                  + (f' Management conviction of <b>{conv:+.2f}</b>: it held its message {"better" if conv >= 0 else "less well"} than the average call.' if fin(conv) else '')))
+else:
+    neg_top = Counter(w for ws in scored['neg_words'] for w in ws).most_common(3)
+    takes.append(('What drove the tone', ('Most frequent negative words: ' + ', '.join(f'<b>{esc(w)}</b> ({c})' for w, c in neg_top) + '.')
+                  if neg_top else 'No negative finance words were found in this text.'))
+st.markdown('<div class="qm-takes"><div class="qm-takes-h">Top 3 takeaways</div><div class="qm-takes-g">'
+            + ''.join(f'<div class="qm-take"><span class="n">{i}</span><h5>{esc(t)}</h5><p>{b}</p></div>' for i, (t, b) in enumerate(takes, 1))
+            + '</div></div>', unsafe_allow_html=True)
+
+
 def vs(value, avg, unit=''):
     if not np.isfinite(value) or not np.isfinite(avg):
         return ''
@@ -202,7 +240,55 @@ with right:
     st.altair_chart(alt.layer(*layers).properties(height=250, title='How tone moves through the call'), width='stretch')
     st.caption('The dashed line marks where the Q&A starts.')
 
-ui.section('B · IN CONTEXT', 'Where this call sits among the benchmark',
+ui.section('B · SENTIMENT PROFILE', 'Fingerprint and question-by-question view',
+           f'Left: each measure compared with {esc(peer_word)}, scaled so that right of the line is more upbeat or confident than average. '
+           'Right: the tone of each analyst question and of management\'s answer to it, in the order they came.')
+left, right = st.columns([1, 1.15])
+with left:
+    measures = [('Tone', 'lm_tone', 1), ('Sector-adjusted tone', 'lm_tone_sector', 1), ('VADER (general tool)', 'vader', 1),
+                ('TextBlob (general tool)', 'textblob', 1), ('Fewer uncertain words', 'lm_uncertainty', -1),
+                ('Tone held into Q&A', 'tone_shift', 1), ('Less hedging in Q&A', 'hedging', -1), ('Milder analyst questions', 'analyst_neg_rate', -1)]
+    fp = []
+    for label, col, sign in measures:
+        if col in peers and fin(res.get(col)) and peers[col].std() > 0:
+            fp.append({'measure': label, 'z': float(np.clip(sign * (res[col] - peers[col].mean()) / peers[col].std(), -3, 3))})
+    if fp:
+        fp = pd.DataFrame(fp)
+        fp['side'] = np.where(fp['z'] >= 0, 'Above average', 'Below average')
+        bars = alt.Chart(fp).mark_bar(cornerRadiusEnd=3, size=20).encode(
+            y=alt.Y('measure:N', sort=[m[0] for m in measures], title=None, axis=alt.Axis(labelLimit=200)),
+            x=alt.X('z:Q', title=f'Standard deviations from the {sector.lower() if sector else "benchmark"} average', scale=alt.Scale(domain=[-3, 3])),
+            color=alt.Color('side:N', scale=alt.Scale(domain=['Above average', 'Below average'], range=[ui.OLIVE, ui.ROSE])),
+            tooltip=['measure', alt.Tooltip('z:Q', format='+.2f', title='Std. deviations')])
+        mid = alt.Chart(pd.DataFrame({'x': [0]})).mark_rule(color=ui.INK).encode(x='x:Q')
+        st.altair_chart((bars + mid).properties(height=alt.Step(34), title='Sentiment fingerprint'), width='stretch')
+with right:
+    ex, cur, n = [], None, 0
+    for _, r in scored[scored['part'].isin(['qa_analyst', 'qa_management'])].iterrows():
+        if r['part'] == 'qa_analyst' and r['speaker'] != cur:
+            cur, n = r['speaker'], n + 1
+        if n:
+            ex.append({'exchange': n, 'analyst': cur, 'who': 'Analyst question' if r['part'] == 'qa_analyst' else 'Management answer',
+                       'pos': r['lm_pos'], 'neg': r['lm_neg'], 'words': r['n_words']})
+    if ex:
+        ex = pd.DataFrame(ex).groupby(['exchange', 'analyst', 'who'], as_index=False)[['pos', 'neg', 'words']].sum()
+        ex = ex[ex['words'] >= 20]
+        ex['tone'] = (ex['pos'] - ex['neg']) / ex['words'] * 100
+    if isinstance(ex, pd.DataFrame) and ex['exchange'].nunique() >= 3:
+        qa = alt.Chart(ex).mark_line(point=alt.OverlayMarkDef(size=55, filled=True), strokeWidth=2).encode(
+            x=alt.X('exchange:O', title='Analyst exchange (in order)', axis=alt.Axis(labelAngle=0)),
+            y=alt.Y('tone:Q', title='Tone'),
+            color=alt.Color('who:N', scale=alt.Scale(domain=['Management answer', 'Analyst question'], range=[ui.SMITH_BLUE, '#D19A00'])),
+            tooltip=['exchange', 'analyst', 'who', alt.Tooltip('tone:Q', format='.2f'), 'words'])
+        zero = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color=ui.LINE).encode(y='y:Q')
+        st.altair_chart((zero + qa).properties(height=300, title='Question by question'), width='stretch')
+        worst = ex[ex['who'] == 'Analyst question'].nsmallest(1, 'tone')
+        if not worst.empty:
+            st.caption(f'Toughest question: exchange {int(worst["exchange"].iloc[0])} ({worst["analyst"].iloc[0]}). Hover over a point for the details.')
+    else:
+        ui.note('The question-by-question view needs a transcript with speaker labels (Bloomberg or LSEG format).')
+
+ui.section('C · IN CONTEXT', 'Where this call sits among the benchmark',
            f'Every grey dot is a benchmark call; the blue diamond is this call. Dashed lines split the benchmark into Negative, Neutral and Positive thirds.')
 strip = pd.concat([bench[['label', 'sector', 'composite', 'signal']].assign(kind='Benchmark calls'),
                    pd.DataFrame([{'label': 'This call', 'sector': detected or 'unknown', 'composite': res['composite'], 'signal': res['signal'], 'kind': 'This call'}])])
@@ -217,7 +303,7 @@ dots = alt.Chart(strip).mark_point(filled=True, opacity=0.9).encode(
 cuts = alt.Chart(pd.DataFrame({'x': [q1, q2]})).mark_rule(strokeDash=[4, 4], color='#C8CFDB').encode(x='x:Q')
 st.altair_chart(alt.layer(cuts, dots).properties(height=140), width='stretch')
 
-ui.section('C · MARKET REACTION', 'How the stock moved around this call',
+ui.section('D · MARKET REACTION', 'How the stock moved around this call',
            f'The line shows the stock\'s {term("Cumulative abnormal return (CAR)", "cumulative abnormal return")}: how much it beat or lagged the market, '
            'starting from the close the day before the call. Prices are fetched live from Yahoo Finance.')
 if not ticker or not call_date:
@@ -260,16 +346,28 @@ else:
             ui.note(f'<b>Reading.</b> {agree[(res["signal"], day >= 0)]} One call is anecdote, not evidence; the Market reaction page tests the pattern across all benchmark calls.')
         st.caption(f'Source: {source}. Abnormal return = stock return minus benchmark return each day.')
 
-ui.section('D · UNDER THE HOOD', 'What drove the score')
+ui.section('E · UNDER THE HOOD', 'What drove the score')
 c1, c2, c3 = st.columns(3)
 pos = Counter(w for ws in scored['pos_words'] for w in ws).most_common(10)
 neg = Counter(w for ws in scored['neg_words'] for w in ws).most_common(10)
+
+
+def word_bars(words, title, colour):
+    if not words:
+        st.caption('None found.')
+        return
+    d = pd.DataFrame(words, columns=['word', 'count'])
+    ch = alt.Chart(d).mark_bar(cornerRadiusEnd=3, color=colour).encode(
+        y=alt.Y('word:N', sort='-x', title=None, axis=alt.Axis(labelOverlap=False, labelLimit=150)),
+        x=alt.X('count:Q', title='Times used'), tooltip=['word', 'count'])
+    txt = ch.mark_text(align='left', dx=3, fontSize=11, color=ui.INK).encode(text='count:Q')
+    st.altair_chart((ch + txt).properties(height=alt.Step(24), title=title), width='stretch')
+
+
 with c1:
-    st.markdown('**Most frequent positive words**')
-    st.dataframe(pd.DataFrame(pos, columns=['word', 'count']), hide_index=True, width='stretch')
+    word_bars(pos, 'Most frequent positive words', ui.OLIVE)
 with c2:
-    st.markdown('**Most frequent negative words**')
-    st.dataframe(pd.DataFrame(neg, columns=['word', 'count']), hide_index=True, width='stretch')
+    word_bars(neg, 'Most frequent negative words', ui.ROSE)
 with c3:
     st.markdown('**Sector jargon set aside**')
     nt = sc.neutral_terms(lexicon, lex_sector)

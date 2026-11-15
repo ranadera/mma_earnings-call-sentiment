@@ -1,2 +1,2 @@
-# mma_earnings-call-sentiment
+# mma-earnings-call-sentiment
 MMA earnings-call-sentiment

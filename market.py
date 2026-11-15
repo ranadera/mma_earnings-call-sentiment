@@ -54,6 +54,17 @@ def company_info(ticker):
         return {}
 
 
+def yahoo_sector(ticker):
+    """Map Yahoo Finance's sector and industry to our sector groups (Bank, Tech) or return Yahoo's sector name."""
+    info = company_info(ticker) if ticker else {}
+    sector, industry = info.get('sector') or '', info.get('industry') or ''
+    if 'bank' in industry.lower():
+        return 'Bank'
+    if sector == 'Technology' or industry.startswith('Internet') or 'software' in industry.lower() or 'semiconductor' in industry.lower():
+        return 'Tech'
+    return sector or None
+
+
 def event_window(px, ticker, call_date, benchmark=MARKET, window=21):
     """Daily returns, abnormal returns and their running total from -window to +window trading days."""
     if px is None or ticker not in px.columns or benchmark not in px.columns:

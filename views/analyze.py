@@ -36,38 +36,54 @@ def detect_meta(name, data):
 
 ui.hero('Analyze a call', 'Score any earnings call in seconds',
         'Upload a transcript (Bloomberg or LSEG PDF) or paste the text of any earnings call. The app splits it into the scripted '
-        'presentation and the live Q&A, measures the tone of each part, compares it with the benchmark, and shows how the stock moved around the call.')
-ui.coverage_banner(bench, calibrated, counts)
+        'presentation and the live Q&amp;A, measures the tone of each part, compares it with its sector, and shows how the stock moved around the call.')
 
-with st.container(border=True):
-    st.markdown('#### 1. Your transcript')
-    tab_up, tab_paste = st.tabs(['Upload a PDF or text file', 'Paste text'])
+with st.sidebar:
+    st.markdown('<div class="qm-side-brand">QUANTA-MENTALS<span>Call analyzer</span></div>', unsafe_allow_html=True)
+    st.markdown('<p class="qm-side-h">1 · Transcript</p>', unsafe_allow_html=True)
+    source = st.radio('Input', ['Upload a file', 'Paste text'], horizontal=True, label_visibility='collapsed')
     name, data = None, None
-    with tab_up:
-        f = st.file_uploader('Transcript file', type=['pdf', 'txt'], label_visibility='collapsed')
+    if source == 'Upload a file':
+        f = st.file_uploader('PDF or text file', type=['pdf', 'txt'], help='Bloomberg and LSEG PDFs are read automatically, including the ticker and date.')
         if f is not None:
             name, data = f.name, f.getvalue()
-    with tab_paste:
-        text = st.text_area('Paste the transcript', height=200, label_visibility='collapsed',
-                            placeholder='Paste the full call text. If it includes a heading such as "Questions And Answers", the app separates the presentation from the Q&A.')
-        if text.strip() and data is None:
+    else:
+        text = st.text_area('Paste the transcript', height=220,
+                            help='If the text contains a heading such as "Questions And Answers", the app splits the presentation from the Q&A.')
+        if text.strip():
             name, data = 'pasted.txt', text.encode('utf-8')
 
-    st.markdown('#### 2. Company details')
-    st.caption('Filled in automatically from Bloomberg and LSEG transcripts. For pasted text, enter the ticker and call date to unlock the sector comparison and the price reaction.')
+    st.markdown('<p class="qm-side-h">2 · Company</p>', unsafe_allow_html=True)
     auto = detect_meta(name, data) if data else {'ticker': '', 'call_date': '', 'company': ''}
-    c1, c2, c3 = st.columns([1, 1, 1.4])
-    ticker = c1.text_input('Ticker', value=auto['ticker'], placeholder='e.g. JPM').strip().upper()
+    ticker = st.text_input('Ticker', value=auto['ticker'], placeholder='e.g. JPM',
+                           help='Read from the transcript when possible. Needed for the sector and the price reaction.').strip().upper()
     default_date = pd.to_datetime(auto['call_date']).date() if auto['call_date'] else None
-    call_date = c2.date_input('Call date', value=default_date, max_value=dt.date.today(), format='YYYY-MM-DD')
-    detected = sector_map.get(ticker) if ticker else None
+    call_date = st.date_input('Call date', value=default_date, max_value=dt.date.today(), format='YYYY-MM-DD')
+
+    st.markdown('<p class="qm-side-h">3 · Compare with</p>', unsafe_allow_html=True)
+    detected, how = (sector_map.get(ticker), 'our sector map') if ticker in sector_map else (None, None)
+    if ticker and not detected:
+        detected, how = mk.yahoo_sector(ticker), 'Yahoo Finance'
     options = ['Auto-detect'] + calibrated + ['All benchmark calls']
-    sector_choice = c3.selectbox('Compare with', options,
-                                 help='Each sector has its own vocabulary, so a call is best compared with its own sector. Auto-detect uses the ticker.')
+    sector_choice = st.selectbox('Benchmark group', options, label_visibility='collapsed',
+                                 help='Each sector has its own vocabulary (banks say credit, losses and reserves, which the finance dictionary counts as negative), '
+                                      'so a call is best compared with its own sector.')
+    if sector_choice == 'Auto-detect':
+        st.caption(f'Detected: **{detected}** (from {how})' if detected else 'Enter a ticker to detect the sector.')
+    st.markdown('<div class="qm-side-foot">Tone uses the Loughran-McDonald finance dictionary, cross-checked with VADER and TextBlob, '
+                'on the same scale as the benchmark calls.</div>', unsafe_allow_html=True)
 
 if data is None:
-    st.write('')
-    ui.note('<b>No transcript yet.</b> Upload a file or paste text above. Tip for the demo: try one bank call and one tech call to see how the sector comparison changes the reading.')
+    ui.coverage_banner(bench, calibrated, counts)
+    st.markdown("""<div class="qm-empty">""" + ui.icon("upload_file") + """
+<h3>Start with a transcript</h3><p>Use the panel on the left to upload a Bloomberg or LSEG PDF, or paste the text of any earnings call.</p></div>""",
+                unsafe_allow_html=True)
+    st.markdown(f"""<div class="qm-steps">
+<div class="qm-step"><span class="n">1 · READ</span><h5>Split the call</h5><p>{term("Prepared presentation", "Prepared presentation")}, analyst questions and management answers.</p></div>
+<div class="qm-step"><span class="n">2 · SCORE</span><h5>Measure tone</h5><p>Upbeat, downbeat and uncertain finance words, cross-checked by two general tools.</p></div>
+<div class="qm-step"><span class="n">3 · COMPARE</span><h5>Against its sector</h5><p>Placed against bank or tech {term("Benchmark", "benchmark")} calls and given a {term("Signal", "signal")}.</p></div>
+<div class="qm-step"><span class="n">4 · REACT</span><h5>Check the stock</h5><p>Live {term("Abnormal return", "abnormal return")} over the day, week and month after the call.</p></div>
+</div>""", unsafe_allow_html=True)
     ui.footer()
     st.stop()
 
@@ -94,9 +110,14 @@ st.markdown(f'<div class="qm-company"><h3>{esc(company)}</h3><div class="meta">'
             + '</div></div>', unsafe_allow_html=True)
 if sector_choice == 'Auto-detect' and sector is None:
     if detected:
-        ui.warn(f'<b>{esc(ticker)}</b> is in the <b>{esc(detected)}</b> sector, which is not in the benchmark yet, so it is compared with all {len(bench)} calls. Read the relative scores with care.')
+        ui.warn(f'<b>{esc(ticker)}</b> is in the <b>{esc(detected)}</b> sector (from {how}). The benchmark covers {" and ".join(calibrated)} only so far, '
+                f'so this call is compared with all {len(bench)} benchmark calls. Read the relative scores with care.')
+    elif ticker:
+        ui.warn(f'The sector of <b>{esc(ticker)}</b> could not be looked up, so this call is compared with all {len(bench)} benchmark calls. '
+                f'Pick <b>Bank</b> or <b>Tech</b> under "Compare with" in the left panel if one fits.')
     else:
-        ui.warn(f'The sector of this company is not known yet (enter its ticker, or add it to the sector map), so it is compared with all {len(bench)} benchmark calls.')
+        ui.warn(f'No ticker was found in this text, so the sector is unknown and the call is compared with all {len(bench)} benchmark calls. '
+                f'Enter the ticker in the left panel to compare it with its own sector and to see the price reaction.')
 if fmt.startswith('Plain'):
     ui.warn('Speakers could not be identified in this text, so analyst questions and management answers cannot be separated. The overall tone is still valid; the Q&A measures are limited.')
 
@@ -152,13 +173,18 @@ with left:
             rows += [{'part': label, 'series': 'This call', 'tone': tone}, {'part': label, 'series': peer_name, 'tone': peers[col].mean()}]
     if rows:
         df = pd.DataFrame(rows)
-        chart = alt.Chart(df).mark_bar(cornerRadiusEnd=3, height=16).encode(
-            y=alt.Y('part:N', title=None, sort=list(PART_NAMES.values()), axis=alt.Axis(labelLimit=220)),
+        chart = alt.Chart(df).mark_bar(cornerRadiusEnd=3).encode(
+            y=alt.Y('part:N', title=None, sort=list(PART_NAMES.values()), axis=alt.Axis(labelLimit=220),
+                    scale=alt.Scale(paddingInner=0.35, paddingOuter=0.2)),
             yOffset=alt.YOffset('series:N', sort=['This call', peer_name]),
             x=alt.X('tone:Q', title='Tone (net positive words per 100)'),
             color=alt.Color('series:N', scale=alt.Scale(domain=['This call', peer_name], range=[ui.AZURE, '#B9C3D3'])),
             tooltip=['part', 'series', alt.Tooltip('tone:Q', format='.2f')])
-        st.altair_chart(chart.properties(height=250, title='Tone by part of the call'), width='stretch')
+        zero = alt.Chart(pd.DataFrame({'x': [0]})).mark_rule(color=ui.MUTED).encode(x='x:Q')
+        labels = alt.Chart(df).mark_text(align='left', dx=4, fontSize=11, color=ui.INK).encode(
+            y=alt.Y('part:N', sort=list(PART_NAMES.values())), yOffset=alt.YOffset('series:N', sort=['This call', peer_name]),
+            x=alt.X('pos:Q'), text=alt.Text('tone:Q', format='.2f')).transform_calculate(pos='max(datum.tone, 0)')
+        st.altair_chart((chart + zero + labels).properties(height=250, title='Tone by part of the call'), width='stretch')
 with right:
     line_df = segs.assign(series='This call')
     seg_all = da.segments()

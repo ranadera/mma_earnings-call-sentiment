@@ -11,6 +11,13 @@ ui.hero('Quanta-Mentals · MMA 823 Analytics for Financial Markets',
         'Reading between the lines of earnings calls',
         'A research platform that turns earnings call transcripts into <b>sentiment signals</b> for asset managers and hedge funds, '
         'and tests whether those signals say anything about how the stock moves next.')
+ui.tiles([
+    ('analyze', 'upload_file', 'Analyze a call', 'Upload any transcript and get its sentiment signal and price reaction in seconds.'),
+    ('explorer', 'leaderboard', 'Benchmark explorer', 'Rankings, scripted vs. live tone, analyst pushback.'),
+    ('market_reaction', 'show_chart', 'Market reaction', 'Event study, correlations and a long-short test.'),
+    ('stocks', 'description', 'Stock reports', 'Business, valuation, price history and risk.'),
+    ('method', 'menu_book', 'Method & decisions', 'How it is built, our choices and limits.'),
+])
 ui.coverage_banner(bench, calibrated, counts)
 
 ui.section('01 · THE BRIEF', 'What our client asked for',
@@ -55,21 +62,5 @@ st.write('')
 ui.note('<b>Why it matters for an investor.</b> Scripted remarks are polished; the live Q&A is where caution shows. '
         'Comparing the two, and comparing banks with banks rather than with tech, is what turns raw word counts into a usable signal. '
         'Whether that signal predicts returns is tested on the <b>Market reaction</b> page.')
-
-ui.section('04 · EXPLORE', 'Where to go next')
-r1 = st.columns(3)
-r2 = st.columns(3)
-links = [
-    ('views/analyze.py', 'Analyze a call', 'Upload any earnings call transcript and get its sentiment profile and price reaction.', ':material/upload_file:'),
-    ('views/explorer.py', 'Benchmark explorer', 'Compare all benchmark calls: rankings, scripted vs. live tone, analyst pushback.', ':material/leaderboard:'),
-    ('views/market_reaction.py', 'Market reaction', 'Did sentiment line up with the stock move? Correlations and a long-short test.', ':material/candlestick_chart:'),
-    ('views/stocks.py', 'Stock reports', 'One-page profile of each stock: business, valuation, price history and risk.', ':material/description:'),
-    ('views/method.py', 'Method & decisions', 'How every number is built, the decisions we made, our assumptions and limits.', ':material/menu_book:'),
-]
-for col, (page, title, desc, icon) in zip(r1 + r2, links):
-    with col:
-        with st.container(border=True):
-            st.page_link(page, label=title, icon=icon)
-            st.caption(desc)
 
 ui.footer()

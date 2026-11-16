@@ -334,6 +334,14 @@ A Streamlit multipage app in Queen's colours. Every technical term has a plain-E
 
 The sector of an uploaded call is detected automatically (the sector map first, then the Yahoo Finance industry) and can be overridden in the side panel.
 
+**"Our view" on the price reaction (Analyze a call).** For each uploaded call the app gives a plain-English verdict on whether the call appears to have moved the stock:
+
+1. **Size test:** the abnormal return over days 0 to +1 is compared with the stock's normal day-to-day movement against the market in the month before the call (standard deviation of daily abnormal returns × √2). Below 1× = normal noise ("little measurable impact"), 1–2× = noticeable, above 2× = unusual.
+2. **Direction test:** does the move match the call's signal (Positive tone and the stock beat the market, or Negative tone and it lagged)?
+3. **Verdict:** *Little measurable impact*, *Likely impact, in line with the tone*, *Strong reaction, but not explained by the tone*, or *Reaction with no clear tone signal*, plus context: the move in the month before the call (already priced in?), whether the move continued, faded or reversed in the first week, and whether it was company-specific or shared with the sector ETF.
+
+The verdict is explicitly an indication of **association, not causation**. The app states clearly that macroeconomic factors (rates, inflation, yields, currencies, geopolitics), company and industry news (earnings vs. expectations, guidance, rating changes, deals) and market factors (flows, index changes) are not analysed, and that this is a student research project, **not financial advice**.
+
 ---
 
 ## 14. Stock reports (Part 1)

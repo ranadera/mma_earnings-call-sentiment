@@ -189,6 +189,16 @@ a.qm-tile .badge {{ align-self: flex-start; font-size: 10.5px; font-weight: 900;
 .qm-member .av {{ width: 36px; height: 36px; border-radius: 50%; background: {SMITH_BLUE}; color: {GOLD}; font-weight: 900; font-size: 13px;
   display: flex; align-items: center; justify-content: center; flex: none; letter-spacing: .03em; }}
 .qm-member .nm {{ color: {INK}; font-weight: 700; font-size: 14.5px; }}
+.qm-verdict {{ background: #fff; border: 1px solid {LINE}; border-left: 6px solid {SMITH_BLUE}; border-radius: 0 8px 8px 0; padding: 14px 18px; margin: 10px 0; }}
+.qm-verdict .lbl {{ color: {RED}; font-weight: 900; font-size: 11.5px; letter-spacing: .12em; }}
+.qm-verdict h4 {{ margin: 3px 0 8px; color: {SMITH_BLUE}; font-size: 20px; font-weight: 900; padding: 0; }}
+.qm-verdict p {{ color: {INK}; font-size: 14.5px; line-height: 1.55; margin: 0 0 6px; }}
+.qm-verdict p.small {{ color: {MUTED}; font-size: 12.5px; margin-top: 8px; }}
+.qm-limits {{ background: #FFF8E6; border: 1px solid #F3DFA6; border-radius: 8px; padding: 14px 18px; margin: 10px 0; }}
+.qm-limits h4 {{ margin: 0 0 6px; color: {SMITH_BLUE}; font-size: 16px; font-weight: 900; padding: 0; }}
+.qm-limits p, .qm-limits li {{ color: {INK}; font-size: 14px; line-height: 1.55; }}
+.qm-limits ul {{ margin: 4px 0 8px 18px; padding: 0; }}
+.qm-limits p.disc {{ border-top: 1px solid #F3DFA6; padding-top: 8px; margin-top: 8px; font-weight: 700; color: {SMITH_BLUE}; }}
 .qm-foot {{ color: {MUTED}; font-size: 12.5px; border-top: 1px solid {LINE}; margin-top: 40px; padding-top: 12px; }}
 div[data-testid="stExpander"] details {{ background: #fff; border-radius: 6px; border: 1px solid {LINE}; }}
 div[data-testid="stExpander"] summary p {{ font-weight: 700; color: {SMITH_BLUE}; }}
@@ -286,7 +296,7 @@ def team():
 
 def footer():
     st.markdown('<div class="qm-foot">Quanta-Mentals · Group 9 · MMA 823: Analytics for Financial Markets · Smith School of Business, Queen\'s University. '
-                'Research prototype, not investment advice. Transcripts are not stored or published; only derived scores are used.</div>',
+                'Student research project, not financial advice. Transcripts are not stored or published; only derived scores are used.</div>',
                 unsafe_allow_html=True)
 
 

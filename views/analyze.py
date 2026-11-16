@@ -319,31 +319,107 @@ else:
         ui.warn(f'Price data for <b>{esc(ticker)}</b> could not be loaded. {esc(source or "")} The sentiment results above are unaffected.')
     else:
         ev_sec = mk.event_window(px, ticker, call_date, bench_etf) if bench_etf else None
-        m1, m2, m3 = st.columns(3)
-        for col, (label, (a, b)) in zip([m1, m2, m3], mk.WINDOWS.items()):
-            v = mk.car(ev, a, b)
+
+        def raw(ev, a, b, col):
+            w = ev[(ev['day'] >= a) & (ev['day'] <= b)]
+            return (1 + w[col]).prod() - 1 if not w.empty and w['day'].max() >= b else np.nan
+
+        pre_car, day_car, week_car, month_car = mk.car(ev, -21, -1), mk.car(ev, 0, 1), mk.car(ev, 0, 5), mk.car(ev, 0, 21)
+        stock_day, mkt_day = raw(ev, 0, 1, 'ret'), raw(ev, 0, 1, 'bench_ret')
+        noise = ev.loc[ev['day'] < 0, 'abn_ret'].std()
+        size = abs(day_car) / (noise * np.sqrt(2)) if np.isfinite(day_car) and noise and noise > 0 else np.nan
+        sec_day = mk.car(ev_sec, 0, 1) if ev_sec is not None else np.nan
+
+        st.markdown(f"""<div class="qm-steps">
+<div class="qm-step"><span class="n">THE QUESTION</span><h5>Did this call move the stock?</h5><p>We look at the stock from one month before to one month after the call.</p></div>
+<div class="qm-step"><span class="n">THE ADJUSTMENT</span><h5>Remove the market's move</h5><p>Each day we subtract the S&amp;P 500's return, so a market-wide rally or sell-off is not credited to the call. This is the {term("Abnormal return", "abnormal return")}.</p></div>
+<div class="qm-step"><span class="n">THE SIZE TEST</span><h5>Was the move unusual?</h5><p>We compare the move after the call with how much this stock normally wobbles against the market on an ordinary day.</p></div>
+<div class="qm-step"><span class="n">THE VIEW</span><h5>Does it match the tone?</h5><p>We check whether the stock moved in the direction the call's tone suggested.</p></div>
+</div>""", unsafe_allow_html=True)
+        st.write('')
+
+        st.caption('All four figures are abnormal returns: the stock\'s move minus the S&P 500\'s move over the same days.')
+        k = st.columns(4)
+        cards = [('Month before (−21 to −1)', pre_car, 'Was the stock already rising or falling before the call?'),
+                 ('Reaction (day 0 to +1)', day_car, f'Stock itself <b>{stock_day:+.1%}</b>, S&amp;P 500 <b>{mkt_day:+.1%}</b>' if np.isfinite(stock_day) else 'Not enough trading days yet'),
+                 ('First week (0 to +5)', week_car, 'Did the reaction hold, grow or fade?'),
+                 ('First month (0 to +21)', month_car, 'The longer-run move after the call')]
+        for col, (label, v, note) in zip(k, cards):
             with col:
-                ui.kpi(f'{label} vs. S&amp;P 500', f'{v:+.1%}' if np.isfinite(v) else 'n/a',
-                       ('Beat the market' if v >= 0 else 'Lagged the market') if np.isfinite(v) else 'Not enough trading days yet',
-                       color=ui.OLIVE if np.isfinite(v) and v >= 0 else ui.ROSE)
+                ui.kpi(label, f'{v:+.1%}' if np.isfinite(v) else 'n/a', note,
+                       color=ui.MUTED if not np.isfinite(v) else ui.OLIVE if v >= 0 else ui.ROSE)
+
         plot = ev.assign(benchmark='vs. S&P 500 (SPY)')
         if ev_sec is not None:
             plot = pd.concat([plot, ev_sec.assign(benchmark=f'vs. {detected} ETF ({bench_etf})')])
+        band = alt.Chart(pd.DataFrame({'x': [0], 'x2': [1]})).mark_rect(color=ui.GOLD, opacity=0.18).encode(x='x:Q', x2='x2:Q')
         line = alt.Chart(plot).mark_line(strokeWidth=2.5).encode(
-            x=alt.X('day:Q', title='Trading days from the call (0 = call day)'),
-            y=alt.Y('car:Q', title='Cumulative abnormal return', axis=alt.Axis(format='%')),
-            color=alt.Color('benchmark:N', scale=alt.Scale(range=[ui.AZURE, ui.PUMPKIN])),
-            tooltip=['benchmark', 'day', alt.Tooltip('date:T', format='%d %b %Y'), alt.Tooltip('car:Q', format='+.2%', title='CAR')])
+            x=alt.X('day:Q', title='Trading days from the call (0 = call day; shaded = reaction days 0 to +1)'),
+            y=alt.Y('car:Q', title='vs. benchmark (cumulative)', axis=alt.Axis(format='%')),
+            color=alt.Color('benchmark:N', title=None, scale=alt.Scale(domain=sorted(plot['benchmark'].unique(), key=lambda x: 'S&P' not in x),
+                                                                       range=[ui.AZURE, ui.PUMPKIN])),
+            tooltip=['benchmark', 'day', alt.Tooltip('date:T', format='%d %b %Y'), alt.Tooltip('car:Q', format='+.2%', title='Cumulative')])
         zero = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color=ui.LINE).encode(y='y:Q')
-        day0 = alt.Chart(pd.DataFrame({'x': [0]})).mark_rule(strokeDash=[4, 4], color=ui.MUTED).encode(x='x:Q')
-        st.altair_chart(alt.layer(zero, day0, line).properties(height=280), width='stretch')
-        agree = {('Positive', True): 'The tone and the price reaction point the same way.',
-                 ('Negative', False): 'The tone and the price reaction point the same way.',
-                 ('Positive', False): 'The market reacted against the upbeat tone: other news (the numbers, guidance) likely dominated.',
-                 ('Negative', True): 'The market shrugged off the cautious tone: other news (the numbers, guidance) likely dominated.'}
-        day = mk.car(ev, 0, 1)
-        if res['signal'] != 'Neutral' and np.isfinite(day):
-            ui.note(f'<b>Reading.</b> {agree[(res["signal"], day >= 0)]} One call is anecdote, not evidence; the Market reaction page tests the pattern across all benchmark calls.')
+        st.altair_chart(alt.layer(band, zero, line).properties(height=300), width='stretch')
+        st.caption('Read the line as a running score against the market: above zero = the stock did better than the S&P 500 since the start of that side of '
+                   'the window; below zero = worse. Left of the shaded band: the month before the call. Right of it: the month after.')
+
+        # our view
+        if not np.isfinite(day_car):
+            ui.note('The call is too recent to judge the reaction: at least two trading days after the call are needed.')
+        else:
+            up = day_car >= 0
+            size_txt = ('within the stock\'s normal day-to-day noise' if size < 1 else
+                        'noticeably larger than a normal day' if size < 2 else 'unusually large, about {:.0f} times a normal two-day move'.format(size)) if np.isfinite(size) else 'of unknown size'
+            level = 'small' if size < 1 else 'moderate' if size < 2 else 'large'
+            match = (res['signal'] == 'Positive' and up) or (res['signal'] == 'Negative' and not up)
+            clash = (res['signal'] == 'Positive' and not up) or (res['signal'] == 'Negative' and up)
+            if level == 'small':
+                verdict, colour, body = 'Little measurable impact', ui.MUTED, (
+                    f'Over the call day and the next day the stock {"beat" if up else "lagged"} the market by {abs(day_car):.1%}, which is {size_txt}. '
+                    'In our view the call did not move the stock in a way we can separate from ordinary daily movement.')
+            elif match:
+                verdict, colour, body = 'Likely impact, in line with the tone', ui.OLIVE if up else ui.ROSE, (
+                    f'The stock {"beat" if up else "lagged"} the market by {abs(day_car):.1%} over days 0 to +1, a move that is {size_txt}, '
+                    f'and in the same direction as the call\'s <b>{res["signal"].lower()}</b> tone. In our view the call, together with the results '
+                    'released with it, had a real effect on the stock, and the language pointed the right way.')
+            elif clash:
+                verdict, colour, body = 'Strong reaction, but not explained by the tone', ui.PUMPKIN, (
+                    f'The stock {"beat" if up else "lagged"} the market by {abs(day_car):.1%} over days 0 to +1 ({size_txt}), the <b>opposite</b> of what '
+                    f'the call\'s {res["signal"].lower()} tone suggested. In our view something other than the tone drove the move, most likely the '
+                    'reported numbers versus expectations, guidance, or other news on the same days.')
+            else:
+                verdict, colour, body = 'Reaction with no clear tone signal', ui.SKY, (
+                    f'The stock {"beat" if up else "lagged"} the market by {abs(day_car):.1%} over days 0 to +1 ({size_txt}). The call\'s tone was '
+                    'neutral, so the language does not explain the direction; the numbers, guidance or other news are the likelier drivers.')
+            extra = []
+            if np.isfinite(pre_car) and abs(pre_car) > 0.03:
+                extra.append(f'The stock had already {"outperformed" if pre_car > 0 else "underperformed"} the market by {abs(pre_car):.1%} in the month before the call, '
+                             'so part of the news may have been priced in beforehand.')
+            if np.isfinite(week_car):
+                if np.sign(week_car) == np.sign(day_car) and abs(week_car) > abs(day_car):
+                    extra.append(f'The move <b>continued</b> through the first week ({week_car:+.1%} vs. the market).')
+                elif np.sign(week_car) != np.sign(day_car):
+                    extra.append(f'The move <b>reversed</b> within the first week ({week_car:+.1%} vs. the market).')
+                else:
+                    extra.append(f'Part of the move faded during the first week ({week_car:+.1%} vs. the market).')
+            if np.isfinite(sec_day):
+                extra.append(f'Against its sector ETF ({bench_etf}) it {"beat" if sec_day >= 0 else "lagged"} by {abs(sec_day):.1%}, '
+                             + ('so the move was specific to this company, not the whole sector.' if np.sign(sec_day) == np.sign(day_car) and abs(sec_day) >= 0.5 * abs(day_car)
+                                else 'so much of the move was shared with the rest of the sector.'))
+            st.markdown(f"""<div class="qm-verdict" style="border-left-color:{colour}">
+<div class="lbl">OUR VIEW</div><h4>{esc(verdict)}</h4><p>{body}</p>{''.join(f'<p>{x}</p>' for x in extra)}
+<p class="small">Size test: the reaction is compared with the stock's typical daily move against the market in the month before the call
+(standard deviation {noise:.1%} per day). Below 1× = normal noise; 1–2× = noticeable; above 2× = unusual.</p></div>""", unsafe_allow_html=True)
+
+        st.markdown("""<div class="qm-limits"><h4>What this view does not consider</h4>
+<p>We only remove the move of the overall market (and, where shown, the sector). Stock prices change for many reasons that are <b>not</b> analysed here, including:</p>
+<ul><li><b>Macroeconomic factors:</b> interest-rate decisions, inflation and jobs data, bond yields, currency moves, oil prices, geopolitical events.</li>
+<li><b>Company and industry factors:</b> reported earnings versus analyst expectations, guidance changes, analyst upgrades and downgrades, deals, legal or regulatory news, management changes, competitors' results.</li>
+<li><b>Market factors:</b> fund flows, options expiry, index changes, short covering, overall risk appetite.</li></ul>
+<p>Our view is therefore an indication of <b>association</b>, not proof that the call caused the move. One call is an anecdote; the <b>Market reaction</b> page tests the pattern across all benchmark calls.</p>
+<p class="disc">This is a student research project for MMA 823 (Smith School of Business, Queen's University). It is <b>not financial advice</b> and must not be used to make investment decisions.</p></div>""",
+                    unsafe_allow_html=True)
         st.caption(f'Source: {source}. Abnormal return = stock return minus benchmark return each day.')
 
 ui.section('E · UNDER THE HOOD', 'What drove the score')

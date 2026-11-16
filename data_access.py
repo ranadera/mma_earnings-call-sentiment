@@ -8,6 +8,7 @@ import sentiment_core as sc
 
 DATA = 'data'
 SHORT_NAMES = {
+    'AAPL': 'Apple', 'CMA': 'Comerica', 'SIVB': 'SVB Financial',
     'AMD': 'AMD', 'GOOGL': 'Alphabet', 'AMZN': 'Amazon', 'AVGO': 'Broadcom', 'C': 'Citigroup', 'CRWV': 'CoreWeave',
     'GS': 'Goldman Sachs', 'JPM': 'JPMorgan', 'KLAC': 'KLA', 'META': 'Meta', 'MSFT': 'Microsoft', 'MPWR': 'Monolithic Power',
     'ORCL': 'Oracle', 'PANW': 'Palo Alto', 'QCOM': 'Qualcomm', 'SNDK': 'Sandisk', 'WFC': 'Wells Fargo', 'WDC': 'Western Digital',

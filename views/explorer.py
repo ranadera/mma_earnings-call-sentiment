@@ -12,23 +12,32 @@ calibrated, counts = da.calibrated_sectors(bench)
 
 ui.hero('Benchmark explorer', 'What the benchmark calls tell us',
         f'All {len(bench)} benchmark calls side by side: which sounded most positive, how tone changed once analysts started asking questions, '
-        'and how different sectors talk. Use the filter to focus on one sector.')
+        'and how different sectors talk. Use the filters to focus on a peer group or a year.')
 
-sectors = sorted(bench['sector'].unique())
-pick = st.segmented_control('Sectors', sectors, selection_mode='multi', default=sectors, label_visibility='collapsed')
-data = bench[bench['sector'].isin(pick or sectors)].copy()
-st.caption(f'Showing {len(data)} calls · ' + ' · '.join(f'{counts[s]} {s.lower()}' for s in (pick or sectors)))
+f1, f2 = st.columns([1.4, 1])
+groups = sorted(bench['group'].unique())
+pick = f1.segmented_control('Peer group', groups, selection_mode='multi', default=groups)
+years = sorted(bench['year'].unique())
+ypick = f2.segmented_control('Year', years, selection_mode='multi', default=years) if len(years) > 1 else years
+data = bench[bench['group'].isin(pick or groups) & bench['year'].isin(ypick or years)].copy()
+st.caption(f'Showing {len(data)} calls · ' + ' · '.join(f'{(data["group"] == g).sum()} {g.lower()}' for g in (pick or groups)))
+if data.empty:
+    st.stop()
 
 ui.section('01 · SENTIMENT', 'Which calls sounded most positive?',
            f'The {term("Overall score", "overall score")} combines three methods. Calls are split into thirds: '
            f'{ui.signal_chip("Positive")} {ui.signal_chip("Neutral")} {ui.signal_chip("Negative")}. Hover over a bar for details.')
-rank = alt.Chart(data).mark_bar(cornerRadiusEnd=3).encode(
+rank_data = data
+if len(data) > 40:
+    rank_data = pd.concat([data.nlargest(15, 'composite'), data.nsmallest(15, 'composite')])
+    st.caption(f'Showing the 15 most and 15 least positive of {len(data)} calls; the full list is in section 07.')
+rank = alt.Chart(rank_data).mark_bar(cornerRadiusEnd=3).encode(
     y=alt.Y('label:N', sort='-x', title=None, axis=alt.Axis(labelLimit=240)),
     x=alt.X('composite:Q', title='Overall score (0 = average benchmark call)'),
     color=alt.Color('signal:N', scale=alt.Scale(domain=list(ui.SIGNAL_COLORS), range=list(ui.SIGNAL_COLORS.values())), legend=None),
     tooltip=['label', 'sector', 'signal', alt.Tooltip('composite:Q', format='+.2f', title='Overall score'),
              alt.Tooltip('lm_tone:Q', format='.2f', title='Tone'), alt.Tooltip('vader:Q', format='.3f', title='VADER')])
-st.altair_chart(rank.properties(height=max(220, 26 * len(data))), width='stretch')
+st.altair_chart(rank.properties(height=max(220, 26 * len(rank_data))), width='stretch')
 
 with st.expander('Do the three methods agree?'):
     corr = data[['lm_tone', 'vader', 'textblob']].corr(method='spearman')
@@ -102,7 +111,21 @@ if {'Bank', 'Tech'} <= set(data['sector']) and 'lm_tone_sector' in data:
     ui.note(f'<b>Honest result:</b> the sector dictionary narrows the bank-tech tone gap from {g0:.2f} to {g1:.2f} '
             f'({(1 - g1 / g0):.0%} smaller). Jargon explains part of why banks score lower, not all of it, which is why we compare banks with banks.')
 
-ui.section('06 · DATA', 'All benchmark calls')
+ui.section('06 · OVER TIME', 'How tone moved quarter by quarter',
+           'Average tone of each peer group by quarter. Watch March 2023, when Silicon Valley Bank failed: did regional banks sound '
+           'more cautious than large banks in the calls that followed?')
+by_q = data.groupby(['quarter', 'group']).agg(tone=('lm_tone', 'mean'), shift=('tone_shift', 'mean'), pushback=('analyst_neg_rate', 'mean'), calls=('call_id', 'count')).reset_index()
+if by_q['quarter'].nunique() >= 2:
+    metric = st.radio('Measure', ['Tone', 'Tone change into Q&A', 'Analyst pushback'], horizontal=True, label_visibility='collapsed')
+    col = {'Tone': 'tone', 'Tone change into Q&A': 'shift', 'Analyst pushback': 'pushback'}[metric]
+    ln = alt.Chart(by_q).mark_line(point=alt.OverlayMarkDef(size=50, filled=True), strokeWidth=2.4).encode(
+        x=alt.X('quarter:O', title=None, axis=alt.Axis(labelAngle=0)), y=alt.Y(f'{col}:Q', title=metric),
+        color=alt.Color('group:N', title=None), tooltip=['quarter', 'group', alt.Tooltip(f'{col}:Q', format='.2f'), 'calls'])
+    st.altair_chart(ln.properties(height=320), width='stretch')
+else:
+    ui.note('This chart appears once the benchmark covers more than one quarter (e.g. after adding the 2023–2024 transcripts).')
+
+ui.section('07 · DATA', 'All benchmark calls')
 show = data[['label', 'sector', 'signal', 'composite', 'lm_tone', 'lm_tone_sector', 'pres_tone', 'qa_mgmt_tone', 'tone_shift', 'analyst_neg_rate', 'conviction_score']]
 st.dataframe(show.sort_values('composite', ascending=False), hide_index=True, width='stretch',
              column_config={'label': 'Call', 'sector': 'Sector', 'signal': 'Signal',

@@ -136,6 +136,49 @@ if not ls.empty:
 ui.warn('<b>Read with care.</b> About 20 calls, clustered in the same weeks, no transaction or shorting costs. '
         'These results show how the test works; a real strategy needs hundreds of calls across several years. Not investment advice.')
 
+ui.section('04 · PREDICTIVE MODEL', 'Train on one year, test on the next',
+           'A logistic regression learns from the sentiment measures of earlier calls whether a stock beat the market, '
+           'then predicts calls it has never seen. Testing on a later year is the honest way to check a trading signal: '
+           'nothing from the test year is used in training.')
+mr = da.model_results()
+if not mr or mr.get('status') != 'ok':
+    ui.note('<b>Not trained yet.</b> ' + ((mr or {}).get('note') or 'The model needs calls from at least two years (e.g. 2023 and 2024).')
+            + ' Add the 2023–2024 transcripts to the transcripts repository; the automated pipeline trains the model and updates this section.')
+else:
+    names = {'lm_tone': 'Tone', 'lm_tone_sector': 'Sector-adjusted tone', 'composite': 'Overall score', 'tone_shift': 'Tone change into Q&A',
+             'conviction_score': 'Management conviction', 'analyst_neg_rate': 'Analyst pushback', 'hedging': 'Hedging'}
+    st.caption(f"Trained on {', '.join(map(str, mr['train_years']))} · tested on {mr['test_year']}"
+               + (f" · also checked on {', '.join(map(str, mr['later_years']))}" if mr.get('later_years') else '')
+               + f" · updated {mr.get('updated', '')}")
+    for key, r in mr['targets'].items():
+        st.markdown(f"**{r['label']}**")
+        if r.get('status') != 'ok':
+            st.caption(r.get('status'))
+            continue
+        cols = st.columns(4)
+        lift = r['accuracy'] - r['baseline_accuracy']
+        with cols[0]:
+            ui.kpi('Test accuracy', f"{r['accuracy']:.0%}", f"Always guessing the most common outcome: <b>{r['baseline_accuracy']:.0%}</b>",
+                   color=ui.OLIVE if lift > 0 else ui.ROSE)
+        with cols[1]:
+            ui.kpi(term('AUC', 'AUC'), f"{r['auc']:.2f}" if r.get('auc') is not None else 'n/a', '0.5 = coin flip; 1.0 = perfect ranking', color=ui.SKY)
+        with cols[2]:
+            ui.kpi('Long-short (test year)', f"{r['long_short']:+.2%}", 'Top third of predicted calls minus bottom third', color=ui.OLIVE if r['long_short'] > 0 else ui.ROSE)
+        with cols[3]:
+            ui.kpi('Calls', f"{r['n_train']} → {r['n_test']}", 'training → test' + (f"; later-year accuracy <b>{r['later_accuracy']:.0%}</b> ({r['n_later']} calls)" if 'later_accuracy' in r else ''), color=ui.PUMPKIN)
+        coef = pd.DataFrame([{'measure': names.get(k, k), 'weight': v} for k, v in r['coefficients'].items()])
+        coef['direction'] = np.where(coef['weight'] >= 0, 'Higher → more likely to beat the market', 'Higher → less likely')
+        ch = alt.Chart(coef).mark_bar(cornerRadiusEnd=3, size=18).encode(
+            y=alt.Y('measure:N', sort='-x', title=None, axis=alt.Axis(labelLimit=200)),
+            x=alt.X('weight:Q', title='Model weight (on standardised measures)'),
+            color=alt.Color('direction:N', scale=alt.Scale(domain=['Higher → more likely to beat the market', 'Higher → less likely'], range=[ui.OLIVE, ui.ROSE]),
+                            legend=alt.Legend(labelLimit=320)),
+            tooltip=['measure', alt.Tooltip('weight:Q', format='+.2f')])
+        st.altair_chart(ch.properties(height=alt.Step(28)), width='stretch')
+    ui.note('<b>How to read it.</b> If test accuracy is not clearly above the "always guess" baseline, the sentiment measures do not predict '
+            'returns out of sample, which is itself a valid finding. The weights show which measures the model leaned on; overlapping measures '
+            '(tone, sector-adjusted tone, overall score) share credit, so read them together.')
+
 with st.expander('Per-call returns'):
     show = data[['label', 'signal', 'composite', 'car_pre', 'car_day', 'car_week', 'car_month']].sort_values('composite', ascending=False)
     st.dataframe(show, hide_index=True, width='stretch', column_config={

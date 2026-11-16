@@ -30,10 +30,32 @@ def benchmark():
     b['name'] = b['ticker'].map(SHORT_NAMES).fillna(b['company'])
     b['label'] = b['name'] + ' (' + b['call_date'].dt.strftime('%b %Y') + ')'
     adj_path = os.path.join(DATA, 'benchmark_sector_tone.csv')
-    if os.path.exists(adj_path):
+    if 'lm_tone_sector' not in b and os.path.exists(adj_path):
         adj = pd.read_csv(adj_path)[['call_id', 'lm_tone_sector']]
         b = b.merge(adj, on='call_id', how='left')
+    groups = peer_groups()
+    b['group'] = b['ticker'].map(groups).fillna('Other ' + b['sector'].str.lower())
+    b['year'] = b['call_date'].dt.year
+    b['quarter'] = b['call_date'].dt.to_period('Q').astype(str)
     return b
+
+
+@st.cache_data
+def peer_groups():
+    path = os.path.join(DATA, 'peer_groups.csv')
+    if not os.path.exists(path):
+        return {}
+    g = pd.read_csv(path, dtype=str).dropna()
+    return dict(zip(g['ticker'].str.upper(), g['group']))
+
+
+@st.cache_data
+def model_results():
+    path = os.path.join(DATA, 'model_results.json')
+    if not os.path.exists(path):
+        return None
+    import json
+    return json.load(open(path))
 
 
 @st.cache_data

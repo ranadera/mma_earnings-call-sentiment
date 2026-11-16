@@ -36,6 +36,15 @@ data/               benchmark scores, sector map, sector dictionary
 
 To add a sector, add its tickers to `data/sector_map.csv` and its routine jargon to `data/sector_lexicon.csv`.
 
+## Automated pipeline
+
+`pipeline/run_pipeline.py` does every loading step in one go: it scores all transcripts (same code as the notebooks), downloads prices and runs the event study, trains a model on 2023 calls and tests it on 2024 calls, and writes only derived numbers to `data/`. It runs automatically from the team's **private** transcripts repository through a GitHub Action whenever transcripts are uploaded there, then pushes the updated `data/` files here. To run it by hand:
+
+```
+pip install -r requirements.txt scikit-learn
+python pipeline/run_pipeline.py --transcripts path/to/transcripts --out data
+```
+
 ## Data and licensing
 
 Bloomberg and LSEG transcripts are licensed and are **not** included in this repository. Only derived scores are published. Prices come live from Yahoo Finance. Yahoo sometimes limits requests from shared hosts such as Streamlit Cloud. For a reliable demo, run `python scripts/make_prices.py AMZN` on your own computer (add any extra tickers you plan to show), then commit `data/prices.csv`; the app uses that file whenever it covers the tickers and dates needed.

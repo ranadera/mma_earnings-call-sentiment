@@ -135,8 +135,26 @@ def car(ev, first, last):
     return w['abn_ret'].sum()
 
 
+def _saved_event_study(calls, benchmark):
+    """Event study precomputed by pipeline/run_pipeline.py, if it covers these calls."""
+    ret_file, path_file = os.path.join('data', 'event_returns.csv'), os.path.join('data', 'event_paths.csv')
+    if not (os.path.exists(ret_file) and os.path.exists(path_file)):
+        return None
+    label = 'SPY' if benchmark == MARKET else 'sector'
+    cars = pd.read_csv(ret_file)
+    cars = cars[(cars['benchmark'] == label) & ((label == 'SPY') | (cars['etf'] == benchmark)) & cars['call_id'].isin(calls['call_id'])]
+    if cars['call_id'].nunique() < 0.8 * calls['call_id'].nunique():
+        return None
+    paths = pd.read_csv(path_file)
+    paths = paths[(paths['benchmark'] == label) & paths['call_id'].isin(cars['call_id'])]
+    return cars.drop(columns=['benchmark', 'etf']), paths[['call_id', 'day', 'abn_ret']]
+
+
 def benchmark_event_study(calls, benchmark=MARKET, window=21):
     """CARs for every benchmark call. calls: DataFrame with call_id, ticker, call_date."""
+    saved = _saved_event_study(calls, benchmark)
+    if saved is not None:
+        return saved[0], saved[1], 'event study saved by the automated pipeline'
     tickers = list(calls['ticker'].unique()) + [benchmark]
     start = (calls['call_date'].min() - pd.Timedelta(days=60)).strftime('%Y-%m-%d')
     end = (calls['call_date'].max() + pd.Timedelta(days=60)).strftime('%Y-%m-%d')

@@ -36,6 +36,7 @@ GLOSSARY = {
     'Long-short strategy': 'Buy the stocks with a positive signal and short-sell those with a negative one. It makes money if positive calls beat negative ones, whatever the market does.',
     'Correlation': 'How closely two measures move together, from -1 to +1. Spearman correlation uses ranks, so a single extreme stock move cannot dominate.',
     'p-value': 'The chance of seeing a result this strong by luck if there were no real relationship. Below 0.05 is the usual bar for "statistically significant".',
+    'AUC': 'Area under the ROC curve: the chance the model ranks a randomly chosen "beat the market" call above a "lagged" one. 0.5 is a coin flip.',
     'Volatility': 'How much a stock\'s price swings, measured as the annualised standard deviation of daily returns.',
     'Maximum drawdown': 'The largest fall from a previous high over the period.',
     'Beta': 'How much the stock tends to move for a 1% move in the S&P 500. Above 1 means more volatile than the market.',

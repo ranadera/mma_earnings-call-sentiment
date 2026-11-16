@@ -303,6 +303,7 @@ dots = alt.Chart(strip).mark_point(filled=True, opacity=0.9).encode(
 cuts = alt.Chart(pd.DataFrame({'x': [q1, q2]})).mark_rule(strokeDash=[4, 4], color='#C8CFDB').encode(x='x:Q')
 st.altair_chart(alt.layer(cuts, dots).properties(height=140), width='stretch')
 
+reaction = None
 ui.section('D · MARKET REACTION', 'How the stock moved around this call',
            f'The line shows the stock\'s {term("Cumulative abnormal return (CAR)", "cumulative abnormal return")}: how much it beat or lagged the market, '
            'starting from the close the day before the call. Prices are fetched live from Yahoo Finance.')
@@ -421,6 +422,7 @@ else:
 <p class="disc">This is a student research project for MMA 823 (Smith School of Business, Queen's University). It is <b>not financial advice</b> and must not be used to make investment decisions.</p></div>""",
                     unsafe_allow_html=True)
         st.caption(f'Source: {source}. Abnormal return = stock return minus benchmark return each day.')
+        reaction = {'day': day_car, 'pre': pre_car, 'week': week_car, 'size': size}
 
 ui.section('E · UNDER THE HOOD', 'What drove the score')
 c1, c2, c3 = st.columns(3)
@@ -474,5 +476,12 @@ with st.expander('Download the scores'):
                          **{k: (round(v, 4) if isinstance(v, (float, np.floating)) else v) for k, v in res.items()}}])
     st.dataframe(out.T.rename(columns={0: 'value'}).astype(str), width='stretch')
     st.download_button('Download as CSV', out.to_csv(index=False), file_name=f"sentiment_{ticker or 'transcript'}.csv", mime='text/csv')
+
+# --- Optional bonus section (remove this block, prof_mehmet.py and features.py to delete it) ---
+import features
+if features.SHOW_PROF_MEHMET:
+    import prof_mehmet
+    prof_mehmet.render(res, peer_word, lex_sector, reaction)
+# --- end of bonus section ---
 
 ui.footer()

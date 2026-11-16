@@ -344,6 +344,8 @@ The verdict is explicitly an indication of **association, not causation**. The a
 
 ---
 
+**Optional bonus: "Prof. Mehmet's take".** At the end of *Analyze a call* there is a collapsed, light-hearted section (tagged *Subscribers only*) with an imagined take on the price reaction, written by Group 9 in the spirit of themes from the MMA 823 lectures: a Noise-o-meter (the reaction against a normal day's movement), the questions he would probably ask (priced in already? roulette wheel or Halley's Comet? the sound in the room in the Q&A, sector context such as credit spreads or the AI build-out, small-sample p-values, counting your trials) and a homework prompt. It does not quote the professor and is not endorsed by him. **To hide it:** set `SHOW_PROF_MEHMET = False` in `features.py`. **To remove it completely:** delete `prof_mehmet.py`, `features.py` and the marked block at the end of `views/analyze.py`.
+
 ## 14. Stock reports (Part 1)
 
 - **App:** for any ticker, the business description, sector and industry; valuation ratios (market cap, P/E, forward P/E, P/B, EV/EBITDA, dividend yield, ROE, beta), with EV/EBITDA shown as n/a for banks, where it is not meaningful; two years of price history indexed against the S&P 500, with each earnings call marked by its signal; 1-year return, volatility, maximum drawdown and 52-week range; and the sentiment history of the company's calls.
@@ -438,6 +440,8 @@ sentiment_core.py         transcript parsing and scoring (shared by app, pipelin
 views/                    one file per page: home, analyze, explorer, market_reaction, stocks, method
 pipeline/run_pipeline.py  automated pipeline: steps 1–8
 scripts/make_prices.py    saves a backup price file for offline demos
+features.py               on/off switches for optional sections
+prof_mehmet.py            optional bonus section (see section 13)
 data/                     derived data only (see section 12)
 requirements.txt          app dependencies (the pipeline also needs scikit-learn)
 ```

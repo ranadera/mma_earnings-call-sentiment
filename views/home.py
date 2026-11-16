@@ -11,6 +11,7 @@ ui.hero('Quanta-Mentals · MMA 823 Analytics for Financial Markets',
         'Reading between the lines of earnings calls',
         'A research platform that turns earnings call transcripts into <b>sentiment signals</b> for asset managers and hedge funds, '
         'and tests whether those signals say anything about how the stock moves next.')
+ui.team()
 ui.tiles([
     ('analyze', 'upload_file', 'Analyze a call', 'Upload any transcript and get its sentiment signal and price reaction in seconds.'),
     ('explorer', 'leaderboard', 'Benchmark explorer', 'Rankings, scripted vs. live tone, analyst pushback.'),
@@ -63,5 +64,4 @@ ui.note('<b>Why it matters for an investor.</b> Scripted remarks are polished; t
         'Comparing the two, and comparing banks with banks rather than with tech, is what turns raw word counts into a usable signal. '
         'Whether that signal predicts returns is tested on the <b>Market reaction</b> page.')
 
-ui.team()
 ui.footer()

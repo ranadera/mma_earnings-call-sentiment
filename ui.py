@@ -178,7 +178,7 @@ a.qm-tile .badge {{ align-self: flex-start; font-size: 10.5px; font-weight: 900;
 .qm-take h5 {{ color: #fff; margin: 0 28px 6px 0; font-size: 15.5px; font-weight: 900; padding: 0; }}
 .qm-take p {{ color: #D5DDEB; margin: 0; font-size: 13.6px; line-height: 1.5; }}
 .qm-take b {{ color: #fff; }}
-.qm-team {{ border: 1px solid {LINE}; border-top: 4px solid {GOLD}; border-radius: 8px; padding: 18px 20px; margin: 36px 0 6px; background: #fff; }}
+.qm-team {{ border: 1px solid {LINE}; border-top: 4px solid {GOLD}; border-radius: 8px; padding: 16px 20px; margin: 0 0 18px; background: #fff; }}
 .qm-team-h {{ display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }}
 .qm-team-h .k {{ color: {RED}; font-weight: 900; font-size: 12px; letter-spacing: .12em; }}
 .qm-team-h .t {{ color: {SMITH_BLUE}; font-weight: 900; font-size: 21px; margin-top: 2px; }}

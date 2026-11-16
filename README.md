@@ -38,6 +38,6 @@ To add a sector, add its tickers to `data/sector_map.csv` and its routine jargon
 
 ## Data and licensing
 
-Bloomberg and LSEG transcripts are licensed and are **not** included in this repository. Only derived scores are published. Prices come live from Yahoo Finance. If you need the app to work offline, add a `data/prices.csv` file (date index, one column per ticker).
+Bloomberg and LSEG transcripts are licensed and are **not** included in this repository. Only derived scores are published. Prices come live from Yahoo Finance. Yahoo sometimes limits requests from shared hosts such as Streamlit Cloud. For a reliable demo, run `python scripts/make_prices.py AMZN` on your own computer (add any extra tickers you plan to show), then commit `data/prices.csv`; the app uses that file whenever it covers the tickers and dates needed.
 
 Research prototype. Not investment advice.

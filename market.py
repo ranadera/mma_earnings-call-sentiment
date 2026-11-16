@@ -4,6 +4,7 @@ If a file data/prices.csv exists (dates in the first column, one adjusted-close 
 it is used instead of downloading, which makes the demo independent of a live connection.
 """
 import os
+import time
 
 import numpy as np
 import pandas as pd
@@ -18,38 +19,75 @@ LOCAL_PRICES = os.path.join('data', 'prices.csv')
 
 def _download(tickers, start, end):
     import yfinance as yf
-    df = yf.download(list(tickers), start=start, end=end, auto_adjust=True, progress=False, threads=True)
-    if df is None or df.empty:
-        return None
-    close = df['Close'] if 'Close' in df.columns.get_level_values(0) else df
-    if isinstance(close, pd.Series):
-        close = close.to_frame(tickers[0])
-    close.index = pd.to_datetime(close.index).tz_localize(None)
+    df = yf.download(list(tickers), start=start, end=end, auto_adjust=True, progress=False, threads=False)
+    close = pd.DataFrame()
+    if df is not None and not df.empty:
+        close = df['Close'] if 'Close' in df.columns.get_level_values(0) else df
+        if isinstance(close, pd.Series):
+            close = close.to_frame(tickers[0])
+    # Yahoo sometimes drops a ticker (rate limits): retry each missing one on its own
+    for t in tickers:
+        if t in close.columns and close[t].notna().sum() > 5:
+            continue
+        time.sleep(1)
+        try:
+            h = yf.Ticker(t).history(start=start, end=end, auto_adjust=True)
+        except Exception:
+            continue
+        if h is not None and not h.empty and 'Close' in h:
+            s = h['Close']
+            s.index = pd.to_datetime(s.index).tz_localize(None).normalize()
+            if not close.empty:
+                close.index = pd.to_datetime(close.index).tz_localize(None).normalize()
+            close = close.drop(columns=[t], errors='ignore').join(s.rename(t), how='outer') if not close.empty else s.rename(t).to_frame()
+    if close.empty:
+        return close
+    close.index = pd.to_datetime(close.index).tz_localize(None).normalize()
     return close.dropna(how='all')
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
-def prices(tickers, start, end):
-    """Adjusted closing prices. Returns (DataFrame or None, message)."""
+def _live_prices(tickers, start, end, required):
+    """Raises when a required ticker is missing, so a failed download is never cached."""
+    close = _download(tickers, start, end)
+    missing = [t for t in required if t not in close.columns or close[t].notna().sum() <= 5]
+    if missing:
+        raise LookupError(', '.join(missing))
+    return close
+
+
+def prices(tickers, start, end, required=None):
+    """Adjusted closing prices. Returns (DataFrame or None, message). required: tickers that must be present (default all)."""
     tickers = tuple(sorted(set(tickers)))
+    required = tuple(sorted(set(required))) if required else tickers
     if os.path.exists(LOCAL_PRICES):
         local = pd.read_csv(LOCAL_PRICES, index_col=0, parse_dates=True)
-        if all(t in local.columns for t in tickers) and local.index.min() <= pd.Timestamp(start) + pd.Timedelta(days=10):
-            return local[list(tickers)], 'saved price file'
+        if (all(t in local.columns for t in tickers) and local.index.min() <= pd.Timestamp(start) + pd.Timedelta(days=10)
+                and local.index.max() >= pd.Timestamp(end) - pd.Timedelta(days=10)):
+            return local[list(tickers)], 'saved price file (data/prices.csv)'
     try:
-        close = _download(tickers, start, end)
+        return _live_prices(tickers, start, end, required), 'Yahoo Finance (live)'
+    except LookupError as e:
+        return None, (f'Yahoo Finance returned no prices for {e}. This is usually a temporary limit on requests from the hosting '
+                      'server; wait a minute and press R to rerun the page.')
     except Exception as e:
-        return None, f'Live price data is unavailable right now ({type(e).__name__}).'
-    if close is None or close.empty:
-        return None, 'Live price data is unavailable right now (no data returned).'
-    return close, 'Yahoo Finance (live)'
+        name = type(e).__name__
+        hint = ' Yahoo is limiting requests from this server; wait a minute and press R to rerun.' if 'Rate' in name or 'Too Many' in str(e) else ''
+        return None, f'Live price data is unavailable right now ({name}).{hint}'
 
 
 @st.cache_data(ttl=24 * 3600, show_spinner=False)
+def _info(ticker):
+    import yfinance as yf
+    info = yf.Ticker(ticker).info or {}
+    if not info.get('sector') and not info.get('longName'):
+        raise LookupError(ticker)
+    return info
+
+
 def company_info(ticker):
     try:
-        import yfinance as yf
-        return yf.Ticker(ticker).info or {}
+        return _info(ticker)
     except Exception:
         return {}
 
@@ -97,15 +135,17 @@ def car(ev, first, last):
     return w['abn_ret'].sum()
 
 
-@st.cache_data(ttl=6 * 3600, show_spinner=False)
 def benchmark_event_study(calls, benchmark=MARKET, window=21):
     """CARs for every benchmark call. calls: DataFrame with call_id, ticker, call_date."""
     tickers = list(calls['ticker'].unique()) + [benchmark]
     start = (calls['call_date'].min() - pd.Timedelta(days=60)).strftime('%Y-%m-%d')
     end = (calls['call_date'].max() + pd.Timedelta(days=60)).strftime('%Y-%m-%d')
-    px, source = prices(tuple(tickers), start, end)
+    px, source = prices(tuple(tickers), start, end, required=(benchmark,))
     if px is None:
         return None, None, source
+    lost = sorted(t for t in calls['ticker'].unique() if t not in px.columns or px[t].notna().sum() <= 5)
+    if lost:
+        source += f' · no prices for {", ".join(lost)}'
     rows, paths = [], []
     for _, c in calls.iterrows():
         ev = event_window(px, c['ticker'], c['call_date'], benchmark, window)

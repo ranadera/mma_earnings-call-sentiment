@@ -141,7 +141,7 @@ ui.section('04 · PREDICTIVE MODEL', 'Train on one year, test on the next',
            'then predicts calls it has never seen. Testing on a later year is the honest way to check a trading signal: '
            'nothing from the test year is used in training.')
 mr = da.model_results()
-if not mr or mr.get('status') != 'ok':
+if not mr or mr.get('status') != 'ok' or not any(t.get('status') == 'ok' for t in mr.get('targets', {}).values()):
     ui.note('<b>Not trained yet.</b> ' + ((mr or {}).get('note') or 'The model needs calls from at least two years (e.g. 2023 and 2024).')
             + ' Add the 2023–2024 transcripts to the transcripts repository; the automated pipeline trains the model and updates this section.')
 else:

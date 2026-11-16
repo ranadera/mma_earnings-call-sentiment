@@ -178,6 +178,17 @@ a.qm-tile .badge {{ align-self: flex-start; font-size: 10.5px; font-weight: 900;
 .qm-take h5 {{ color: #fff; margin: 0 28px 6px 0; font-size: 15.5px; font-weight: 900; padding: 0; }}
 .qm-take p {{ color: #D5DDEB; margin: 0; font-size: 13.6px; line-height: 1.5; }}
 .qm-take b {{ color: #fff; }}
+.qm-team {{ border: 1px solid {LINE}; border-top: 4px solid {GOLD}; border-radius: 8px; padding: 18px 20px; margin: 36px 0 6px; background: #fff; }}
+.qm-team-h {{ display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }}
+.qm-team-h .k {{ color: {RED}; font-weight: 900; font-size: 12px; letter-spacing: .12em; }}
+.qm-team-h .t {{ color: {SMITH_BLUE}; font-weight: 900; font-size: 21px; margin-top: 2px; }}
+.qm-team-h .s {{ color: {MUTED}; font-size: 13.5px; }}
+.qm-team-g {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }}
+@media (max-width: 700px) {{ .qm-team-g {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
+.qm-member {{ display: flex; align-items: center; gap: 10px; background: {TINT}; border-radius: 6px; padding: 9px 12px; }}
+.qm-member .av {{ width: 36px; height: 36px; border-radius: 50%; background: {SMITH_BLUE}; color: {GOLD}; font-weight: 900; font-size: 13px;
+  display: flex; align-items: center; justify-content: center; flex: none; letter-spacing: .03em; }}
+.qm-member .nm {{ color: {INK}; font-weight: 700; font-size: 14.5px; }}
 .qm-foot {{ color: {MUTED}; font-size: 12.5px; border-top: 1px solid {LINE}; margin-top: 40px; padding-top: 12px; }}
 div[data-testid="stExpander"] details {{ background: #fff; border-radius: 6px; border: 1px solid {LINE}; }}
 div[data-testid="stExpander"] summary p {{ font-weight: 700; color: {SMITH_BLUE}; }}
@@ -262,8 +273,19 @@ def tiles(items):
     st.markdown(html_ + '</div>', unsafe_allow_html=True)
 
 
+TEAM = [('Tanushi', 'Khanna'), ('Hannah', 'Kwan'), ('Joanna', 'McFarlane'), ('Shalini', 'Prakash'), ('Rushi', 'Ranade'), ('Jordan', 'Sherwood')]
+
+
+def team():
+    cards = ''.join(f'<div class="qm-member"><span class="av">{esc(f[0] + l[0])}</span><span class="nm">{esc(f)} {esc(l)}</span></div>' for f, l in TEAM)
+    st.markdown(f'<div class="qm-team"><div class="qm-team-h"><div><div class="k">GROUP 9 · QUANTA-MENTALS</div>'
+                f'<div class="t">MMA 823: Analytics for Financial Markets</div></div>'
+                f'<div class="s">Smith School of Business, Queen\'s University</div></div><div class="qm-team-g">{cards}</div></div>',
+                unsafe_allow_html=True)
+
+
 def footer():
-    st.markdown('<div class="qm-foot">Quanta-Mentals · MMA 823 Analytics for Financial Markets · Smith School of Business, Queen\'s University. '
+    st.markdown('<div class="qm-foot">Quanta-Mentals · Group 9 · MMA 823: Analytics for Financial Markets · Smith School of Business, Queen\'s University. '
                 'Research prototype, not investment advice. Transcripts are not stored or published; only derived scores are used.</div>',
                 unsafe_allow_html=True)
 

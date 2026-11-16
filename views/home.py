@@ -63,4 +63,5 @@ ui.note('<b>Why it matters for an investor.</b> Scripted remarks are polished; t
         'Comparing the two, and comparing banks with banks rather than with tech, is what turns raw word counts into a usable signal. '
         'Whether that signal predicts returns is tested on the <b>Market reaction</b> page.')
 
+ui.team()
 ui.footer()

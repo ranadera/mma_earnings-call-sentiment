@@ -294,6 +294,36 @@ def team():
                 unsafe_allow_html=True)
 
 
+REFERENCES = [
+    ('Bernard, V. L., &amp; Thomas, J. K. (1989). Post-earnings-announcement drift: Delayed price response or risk premium? '
+     '<i>Journal of Accounting Research</i>, 27, 1–36.', 'https://doi.org/10.2307/2491062'),
+    ('Brown, S. J., &amp; Warner, J. B. (1985). Using daily stock returns: The case of event studies. '
+     '<i>Journal of Financial Economics</i>, 14(1), 3–31.', 'https://doi.org/10.1016/0304-405X(85)90042-X'),
+    ('Hutto, C., &amp; Gilbert, E. (2014). VADER: A parsimonious rule-based model for sentiment analysis of social media text. '
+     '<i>Proceedings of the International AAAI Conference on Web and Social Media</i>, 8(1), 216–225.', 'https://doi.org/10.1609/icwsm.v8i1.14550'),
+    ('Loughran, T., &amp; McDonald, B. (2011). When is a liability not a liability? Textual analysis, dictionaries, and 10-Ks. '
+     '<i>Journal of Finance</i>, 66(1), 35–65.', 'https://doi.org/10.1111/j.1540-6261.2010.01625.x'),
+    ('Loughran-McDonald Master Dictionary with Sentiment Word Lists. Notre Dame Software Repository for Accounting and Finance.',
+     'https://sraf.nd.edu/loughranmcdonald-master-dictionary/'),
+    ('MacKinlay, A. C. (1997). Event studies in economics and finance. <i>Journal of Economic Literature</i>, 35(1), 13–39.',
+     'https://www.jstor.org/stable/2729691'),
+    ('TextBlob: Simplified text processing (software documentation).', 'https://textblob.readthedocs.io'),
+    ('Yahoo Finance, historical prices, accessed through yfinance (Aroussi, R.), open-source Python library.', 'https://github.com/ranaroussi/yfinance'),
+]
+
+
+FINBERT = ('Araci, D. (2019). FinBERT: Financial sentiment analysis with pre-trained language models. arXiv:1908.10063.',
+           'https://doi.org/10.48550/arXiv.1908.10063')
+
+
+def references(extra=()):
+    refs = sorted(list(REFERENCES) + list(extra), key=lambda r: r[0])
+    items = ''.join(f'<li>{t} <a href="{u}" target="_blank">{u}</a></li>' for t, u in refs)
+    st.markdown(f'<div class="qm-section"><span class="qm-num">REFERENCES</span><h2>Sources and references</h2>'
+                f'<p>Methods and data used on this page. All links were checked by the team.</p></div>'
+                f'<ol style="font-size:13.5px;color:{INK};line-height:1.6;padding-left:20px">{items}</ol>', unsafe_allow_html=True)
+
+
 def footer():
     st.markdown('<div class="qm-foot">Quanta-Mentals · Group 9 · MMA 823: Analytics for Financial Markets · Smith School of Business, Queen\'s University. '
                 'Student research project, not financial advice. Transcripts are not stored or published; only derived scores are used.</div>',

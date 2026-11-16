@@ -109,4 +109,5 @@ ui.section('09 · CODE & DATA', 'Reproducibility')
 ui.note('The full analysis lives in the project\'s Jupyter notebooks: <b>sentiment_analysis</b> (Parts 2 and 3), <b>event_study</b> (Part 4) and '
         '<b>stock_reports</b> (Part 1). This app uses the same scoring code. Bloomberg transcripts are licensed and are not published; '
         'only derived scores are included in the repository.')
+ui.references(extra=[ui.FINBERT])
 ui.footer()

@@ -144,7 +144,7 @@ def render(res, peer_word, sector, reaction):
         size, case, day = np.nan, 'none', np.nan
         if reaction and np.isfinite(reaction.get('day', np.nan)):
             day, size, up = reaction['day'], reaction['size'], reaction['day'] >= 0
-            if not np.isfinite(size) or size < 1:
+            if not np.isfinite(size) or size < 1.96:
                 case = 'small'
             elif (signal == 'Positive' and up) or (signal == 'Negative' and not up):
                 case = 'match'
@@ -193,7 +193,7 @@ def render(res, peer_word, sector, reaction):
         if case == 'none':
             noise_key, pin = 'none', 5
         else:
-            noise_key = 'small' if not np.isfinite(size) or size < 1 else 'mid' if size < 2 else 'big'
+            noise_key = 'small' if not np.isfinite(size) or size < 1.96 else 'mid' if size < 2.58 else 'big'
             pin = 5 if not np.isfinite(size) else float(np.clip(size / 3 * 100, 2, 98))
         noise_txt = rng.choice(NOISE[noise_key])
         title = rng.choice(["Prof. Mehmet's office hours", 'Prof. Mehmet takes the floor', 'A word from Prof. Mehmet', 'Prof. Mehmet, after the bell'])
@@ -203,9 +203,9 @@ def render(res, peer_word, sector, reaction):
 <div class="pm-top"><div class="pm-av">PM</div><div><h4>{esc(title)}</h4>
 <div class="s">An imagined take on {esc(peer_word.removeprefix('all '))}, written by Group 9 in the spirit of the MMA 823 lectures</div></div></div>
 <div class="pm-verdict">{verdict}</div>
-<div class="pm-meter"><div class="lbl">NOISE-O-METER (REACTION VS. A NORMAL DAY): {esc(noise_txt.upper())}</div>
+<div class="pm-meter"><div class="lbl">NOISE-O-METER (|t| OF THE REACTION): {esc(noise_txt.upper())}</div>
 <div class="pm-bar"><div class="pm-pin" style="left:{pin:.0f}%"></div></div>
-<div class="pm-scale"><span>0× · normal noise</span><span>1×</span><span>2× · unusual</span><span>3×+ · front-page news</span></div></div>
+<div class="pm-scale"><span>|t| 0 · normal noise</span><span>1</span><span>2 · unusual (5% level)</span><span>3+ · front-page news</span></div></div>
 <p style="margin:6px 0 6px;font-weight:900;color:#fff;font-size:14px">{esc(intro)}</p>
 <ul>{''.join(f'<li>{b}</li>' for b in bullets)}</ul>
 <div class="pm-hw"><b>Homework:</b> {rng.choice(HOMEWORK)}</div></div>

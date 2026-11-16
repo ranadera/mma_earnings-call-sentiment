@@ -217,7 +217,8 @@ Code: `pipeline/run_pipeline.py`, `market.py`, `event_study.ipynb`.
    ```
 
    Two benchmarks: **SPY** (did the stock beat the market?) and the **sector ETF**, XLK for tech or KBE for banks (did it beat its own sector?).
-4. **Windows reported:**
+4. **Significance of the reaction** (Analyze a call): t = CAR(0,+1) / (σ × √2), where σ is the standard deviation of the stock's daily abnormal return over an **estimation window of days −120 to −22**, which does not overlap the event window (falls back to days −21 to −1 if there is too little history). |t| ≥ 1.96 is unusual at the 5% level, |t| ≥ 2.58 at the 1% level, assuming independent, normally distributed daily abnormal returns (Brown & Warner, 1985; MacKinlay, 1997).
+5. **Windows reported:**
 
    | Column | Window | Meaning |
    |---|---|---|
@@ -336,11 +337,11 @@ The sector of an uploaded call is detected automatically (the sector map first, 
 
 **"Our view" on the price reaction (Analyze a call).** For each uploaded call the app gives a plain-English verdict on whether the call appears to have moved the stock:
 
-1. **Size test:** the abnormal return over days 0 to +1 is compared with the stock's normal day-to-day movement against the market in the month before the call (standard deviation of daily abnormal returns × √2). Below 1× = normal noise ("little measurable impact"), 1–2× = noticeable, above 2× = unusual.
+1. **Significance test:** the t-statistic of the day 0 to +1 abnormal return (section 9). |t| < 1.96: "no statistically unusual reaction"; |t| ≥ 1.96: unusual at the 5% level; |t| ≥ 2.58: unusual at the 1% level.
 2. **Direction test:** does the move match the call's signal (Positive tone and the stock beat the market, or Negative tone and it lagged)?
-3. **Verdict:** *Little measurable impact*, *Likely impact, in line with the tone*, *Strong reaction, but not explained by the tone*, or *Reaction with no clear tone signal*, plus context: the move in the month before the call (already priced in?), whether the move continued, faded or reversed in the first week, and whether it was company-specific or shared with the sector ETF.
+3. **Verdict:** *No statistically unusual reaction*, *Unusual reaction, in the direction of the tone*, *Unusual reaction, opposite to the tone*, or *Unusual reaction after a neutral-toned call*, plus context: the move in the month before the call (already priced in?), whether the move continued, faded or reversed in the first week, and whether it was company-specific or shared with the sector ETF.
 
-The verdict is explicitly an indication of **association, not causation**. The app states clearly that macroeconomic factors (rates, inflation, yields, currencies, geopolitics), company and industry news (earnings vs. expectations, guidance, rating changes, deals) and market factors (flows, index changes) are not analysed, and that this is a student research project, **not financial advice**.
+**No AI or language model is used anywhere in the app.** Every number is computed by the code in this repository, and every sentence in "Our view" (and in the optional bonus section) is a fixed template selected by explicit rules from those numbers. Each analysed call shows its data sources with links to the Yahoo Finance price history of the stock, SPY and the sector ETF, and lets the user download the daily returns used, so any figure can be checked by hand. The verdict is explicitly an indication of **association, not causation**. The app states clearly that macroeconomic factors (rates, inflation, yields, currencies, geopolitics), company and industry news (earnings vs. expectations, guidance, rating changes, deals) and market factors (flows, index changes) are not analysed, and that this is a student research project, **not financial advice**.
 
 ---
 
@@ -468,11 +469,17 @@ streamlit run app.py
 
 ## 21. References
 
-- Loughran, T., & McDonald, B. (2011). When is a liability not a liability? Textual analysis, dictionaries, and 10-Ks. *Journal of Finance*, 66(1), 35–65.
-- Hutto, C. J., & Gilbert, E. (2014). VADER: A parsimonious rule-based model for sentiment analysis of social media text. *Proceedings of ICWSM*.
-- MacKinlay, A. C. (1997). Event studies in economics and finance. *Journal of Economic Literature*, 35(1), 13–39.
-- Araci, D. (2019). FinBERT: Financial sentiment analysis with pre-trained language models. arXiv:1908.10063.
-- TextBlob documentation: https://textblob.readthedocs.io
+All references and links were checked against the original sources.
+
+- Araci, D. (2019). FinBERT: Financial sentiment analysis with pre-trained language models. arXiv:1908.10063. https://doi.org/10.48550/arXiv.1908.10063
+- Bernard, V. L., & Thomas, J. K. (1989). Post-earnings-announcement drift: Delayed price response or risk premium? *Journal of Accounting Research*, 27, 1–36. https://doi.org/10.2307/2491062
+- Brown, S. J., & Warner, J. B. (1985). Using daily stock returns: The case of event studies. *Journal of Financial Economics*, 14(1), 3–31. https://doi.org/10.1016/0304-405X(85)90042-X
+- Hutto, C., & Gilbert, E. (2014). VADER: A parsimonious rule-based model for sentiment analysis of social media text. *Proceedings of the International AAAI Conference on Web and Social Media*, 8(1), 216–225. https://doi.org/10.1609/icwsm.v8i1.14550
+- Loughran, T., & McDonald, B. (2011). When is a liability not a liability? Textual analysis, dictionaries, and 10-Ks. *Journal of Finance*, 66(1), 35–65. https://doi.org/10.1111/j.1540-6261.2010.01625.x
+- Loughran-McDonald Master Dictionary with Sentiment Word Lists. Notre Dame Software Repository for Accounting and Finance. https://sraf.nd.edu/loughranmcdonald-master-dictionary/
+- MacKinlay, A. C. (1997). Event studies in economics and finance. *Journal of Economic Literature*, 35(1), 13–39. https://www.jstor.org/stable/2729691
+- TextBlob documentation. https://textblob.readthedocs.io
+- Yahoo Finance historical prices, accessed with yfinance (open-source Python library, not affiliated with Yahoo; Yahoo's data is intended for personal use). https://github.com/ranaroussi/yfinance
 
 ---
 

@@ -126,6 +126,24 @@ def event_window(px, ticker, call_date, benchmark=MARKET, window=21):
     return pd.concat([pre, post]).sort_values('day')
 
 
+def estimation_sd(px, ticker, call_date, benchmark=MARKET, first=-120, last=-22, min_obs=60):
+    """Standard deviation of daily abnormal returns in an estimation window before the event (MacKinlay 1997).
+    Returns (sd, number of days, window label). Falls back to days -21 to -1 when there is not enough history."""
+    if px is None or ticker not in px.columns or benchmark not in px.columns:
+        return np.nan, 0, ''
+    rets = px[[ticker, benchmark]].pct_change().dropna()
+    if rets.empty:
+        return np.nan, 0, ''
+    t0 = rets.index.searchsorted(pd.Timestamp(call_date))
+    for a, b in ((first, last), (-21, -1)):
+        lo, hi = max(t0 + a, 0), t0 + b + 1
+        w = rets.iloc[lo:hi] if hi > lo else rets.iloc[0:0]
+        if len(w) >= (min_obs if a == first else 15):
+            abn = w[ticker] - w[benchmark]
+            return float(abn.std()), int(len(w)), f'days {a} to {b}'
+    return np.nan, 0, ''
+
+
 def car(ev, first, last):
     if ev is None:
         return np.nan

@@ -311,7 +311,7 @@ if not ticker or not call_date:
     ui.note('Enter the <b>ticker</b> and <b>call date</b> above to see the price reaction.')
 else:
     bench_etf = mk.SECTOR_ETF.get(detected)
-    start = (pd.Timestamp(call_date) - pd.Timedelta(days=50)).strftime('%Y-%m-%d')
+    start = (pd.Timestamp(call_date) - pd.Timedelta(days=220)).strftime('%Y-%m-%d')
     end = min(pd.Timestamp(call_date) + pd.Timedelta(days=50), pd.Timestamp.today()).strftime('%Y-%m-%d')
     with st.spinner('Fetching prices...'):
         px, source = mk.prices(tuple([ticker, mk.MARKET] + ([bench_etf] if bench_etf else [])), start, end)
@@ -327,8 +327,9 @@ else:
 
         pre_car, day_car, week_car, month_car = mk.car(ev, -21, -1), mk.car(ev, 0, 1), mk.car(ev, 0, 5), mk.car(ev, 0, 21)
         stock_day, mkt_day = raw(ev, 0, 1, 'ret'), raw(ev, 0, 1, 'bench_ret')
-        noise = ev.loc[ev['day'] < 0, 'abn_ret'].std()
-        size = abs(day_car) / (noise * np.sqrt(2)) if np.isfinite(day_car) and noise and noise > 0 else np.nan
+        noise, est_n, est_window = mk.estimation_sd(px, ticker, call_date, mk.MARKET)
+        t_stat = day_car / (noise * np.sqrt(2)) if np.isfinite(day_car) and noise and noise > 0 else np.nan
+        size = abs(t_stat) if np.isfinite(t_stat) else np.nan
         sec_day = mk.car(ev_sec, 0, 1) if ev_sec is not None else np.nan
 
         st.markdown(f"""<div class="qm-steps">
@@ -370,27 +371,28 @@ else:
             ui.note('The call is too recent to judge the reaction: at least two trading days after the call are needed.')
         else:
             up = day_car >= 0
-            size_txt = ('within the stock\'s normal day-to-day noise' if size < 1 else
-                        'noticeably larger than a normal day' if size < 2 else 'unusually large, about {:.0f} times a normal two-day move'.format(size)) if np.isfinite(size) else 'of unknown size'
-            level = 'small' if size < 1 else 'moderate' if size < 2 else 'large'
+            size_txt = (f'not statistically different from normal day-to-day movement (t = {t_stat:+.2f})' if size < 1.96 else
+                        f'statistically unusual at the 5% level (t = {t_stat:+.2f})' if size < 2.58 else
+                        f'statistically unusual at the 1% level (t = {t_stat:+.2f})') if np.isfinite(size) else 'of unknown significance'
+            level = 'small' if not np.isfinite(size) or size < 1.96 else 'large'
             match = (res['signal'] == 'Positive' and up) or (res['signal'] == 'Negative' and not up)
             clash = (res['signal'] == 'Positive' and not up) or (res['signal'] == 'Negative' and up)
             if level == 'small':
-                verdict, colour, body = 'Little measurable impact', ui.MUTED, (
+                verdict, colour, body = 'No statistically unusual reaction', ui.MUTED, (
                     f'Over the call day and the next day the stock {"beat" if up else "lagged"} the market by {abs(day_car):.1%}, which is {size_txt}. '
-                    'In our view the call did not move the stock in a way we can separate from ordinary daily movement.')
+                    'We cannot separate the reaction to this call from ordinary daily movement.')
             elif match:
-                verdict, colour, body = 'Likely impact, in line with the tone', ui.OLIVE if up else ui.ROSE, (
+                verdict, colour, body = 'Unusual reaction, in the direction of the tone', ui.OLIVE if up else ui.ROSE, (
                     f'The stock {"beat" if up else "lagged"} the market by {abs(day_car):.1%} over days 0 to +1, a move that is {size_txt}, '
-                    f'and in the same direction as the call\'s <b>{res["signal"].lower()}</b> tone. In our view the call, together with the results '
-                    'released with it, had a real effect on the stock, and the language pointed the right way.')
+                    f'and in the same direction as the call\'s <b>{res["signal"].lower()}</b> tone. This is consistent with the call, and the results '
+                    'released with it, carrying news for investors. It is an association, not proof that the language caused the move.')
             elif clash:
-                verdict, colour, body = 'Strong reaction, but not explained by the tone', ui.PUMPKIN, (
+                verdict, colour, body = 'Unusual reaction, opposite to the tone', ui.PUMPKIN, (
                     f'The stock {"beat" if up else "lagged"} the market by {abs(day_car):.1%} over days 0 to +1 ({size_txt}), the <b>opposite</b> of what '
-                    f'the call\'s {res["signal"].lower()} tone suggested. In our view something other than the tone drove the move, most likely the '
-                    'reported numbers versus expectations, guidance, or other news on the same days.')
+                    f'the call\'s {res["signal"].lower()} tone suggested. The tone does not explain this move; other information, such as the '
+                    'reported numbers versus expectations, guidance, or other news on the same days, is the more likely driver.')
             else:
-                verdict, colour, body = 'Reaction with no clear tone signal', ui.SKY, (
+                verdict, colour, body = 'Unusual reaction after a neutral-toned call', ui.SKY, (
                     f'The stock {"beat" if up else "lagged"} the market by {abs(day_car):.1%} over days 0 to +1 ({size_txt}). The call\'s tone was '
                     'neutral, so the language does not explain the direction; the numbers, guidance or other news are the likelier drivers.')
             extra = []
@@ -410,8 +412,9 @@ else:
                                 else 'so much of the move was shared with the rest of the sector.'))
             st.markdown(f"""<div class="qm-verdict" style="border-left-color:{colour}">
 <div class="lbl">OUR VIEW</div><h4>{esc(verdict)}</h4><p>{body}</p>{''.join(f'<p>{x}</p>' for x in extra)}
-<p class="small">Size test: the reaction is compared with the stock's typical daily move against the market in the month before the call
-(standard deviation {noise:.1%} per day). Below 1× = normal noise; 1–2× = noticeable; above 2× = unusual.</p></div>""", unsafe_allow_html=True)
+<p class="small">Significance test: t = CAR(0,+1) / (σ × √2), where σ = {noise:.2%} is the standard deviation of the stock's daily abnormal return
+in the estimation window ({est_window}, {est_n} trading days before the call). |t| ≥ 1.96 is unusual at the 5% level, |t| ≥ 2.58 at the 1% level,
+assuming independent, normally distributed daily abnormal returns (Brown &amp; Warner 1985; MacKinlay 1997).</p></div>""", unsafe_allow_html=True)
 
         st.markdown("""<div class="qm-limits"><h4>What this view does not consider</h4>
 <p>We only remove the move of the overall market (and, where shown, the sector). Stock prices change for many reasons that are <b>not</b> analysed here, including:</p>
@@ -421,7 +424,28 @@ else:
 <p>Our view is therefore an indication of <b>association</b>, not proof that the call caused the move. One call is an anecdote; the <b>Market reaction</b> page tests the pattern across all benchmark calls.</p>
 <p class="disc">This is a student research project for MMA 823 (Smith School of Business, Queen's University). It is <b>not financial advice</b> and must not be used to make investment decisions.</p></div>""",
                     unsafe_allow_html=True)
-        st.caption(f'Source: {source}. Abnormal return = stock return minus benchmark return each day.')
+        with st.expander('Method, data sources and reproducibility', icon=':material/fact_check:'):
+            yh = lambda t: f'https://finance.yahoo.com/quote/{t}/history/'
+            etf_line = f' and the sector ETF <a href="{yh(bench_etf)}" target="_blank">{bench_etf}</a>' if bench_etf else ''
+            st.markdown(f"""<div class="qm-note" style="font-size:13.6px">
+<b>Data.</b> Daily adjusted closing prices for <a href="{yh(ticker)}" target="_blank">{esc(ticker)}</a>, the S&amp;P 500 ETF
+<a href="{yh(mk.MARKET)}" target="_blank">SPY</a>{etf_line}, from Yahoo Finance via the open-source
+<a href="https://github.com/ranaroussi/yfinance" target="_blank">yfinance</a> library (not affiliated with Yahoo; Yahoo's data is intended for personal use).
+Source used for this page: <b>{esc(source)}</b>. Click a ticker to check the prices on Yahoo Finance.<br><br>
+<b>Method</b> (market-adjusted model, MacKinlay 1997):<br>
+• Daily return R = P(t) / P(t−1) − 1, using adjusted closes. Day 0 = the call date, or the next trading day.<br>
+• Abnormal return AR(t) = R<sub>stock</sub>(t) − R<sub>benchmark</sub>(t).<br>
+• Cumulative abnormal return CAR(a, b) = sum of AR(t) from day a to day b. Windows: month before (−21 to −1), reaction (0 to +1), week (0 to +5), month (0 to +21).<br>
+• Significance: t = CAR(0,+1) / (σ × √2), σ estimated on {est_window} ({est_n} days), which do not overlap the reaction window.<br>
+• Day 0 to +1 is used so that calls held after the market close are captured.<br><br>
+<b>How the text on this page is produced.</b> No AI or language model is used. All numbers are computed by the code in
+<a href="https://github.com/ranadera/mma_earnings-call-sentiment/blob/main/views/analyze.py" target="_blank">views/analyze.py</a> and
+<a href="https://github.com/ranadera/mma_earnings-call-sentiment/blob/main/market.py" target="_blank">market.py</a>; the sentences
+in "Our view" are fixed templates chosen by explicit rules (the size of t and whether the direction matches the tone signal).</div>""",
+                        unsafe_allow_html=True)
+            dl = ev[['day', 'date', 'ret', 'bench_ret', 'abn_ret', 'car']].rename(columns={'ret': f'{ticker}_return', 'bench_ret': 'SPY_return'})
+            st.download_button('Download the daily returns used (CSV)', dl.to_csv(index=False), file_name=f'event_window_{ticker}_{call_date}.csv', mime='text/csv')
+        st.caption(f'Source: {source}. Abnormal return = stock return minus benchmark return each day. References at the end of the page.')
         reaction = {'day': day_car, 'pre': pre_car, 'week': week_car, 'size': size}
 
 ui.section('E · UNDER THE HOOD', 'What drove the score')
@@ -484,4 +508,5 @@ if features.SHOW_PROF_MEHMET:
     prof_mehmet.render(res, peer_word, lex_sector, reaction)
 # --- end of bonus section ---
 
+ui.references()
 ui.footer()

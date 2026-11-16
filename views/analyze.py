@@ -310,16 +310,19 @@ ui.section('D · MARKET REACTION', 'How the stock moved around this call',
 if not ticker or not call_date:
     ui.note('Enter the <b>ticker</b> and <b>call date</b> above to see the price reaction.')
 else:
-    bench_etf = mk.SECTOR_ETF.get(detected)
+    with st.spinner('Looking up the price symbol...'):
+        pt = mk.resolve_ticker(ticker) or ticker
+    mkt, mkt_label = mk.benchmark_for(pt)
+    bench_etf = mk.SECTOR_ETF.get(detected) if mkt == mk.MARKET else None
     start = (pd.Timestamp(call_date) - pd.Timedelta(days=220)).strftime('%Y-%m-%d')
     end = min(pd.Timestamp(call_date) + pd.Timedelta(days=50), pd.Timestamp.today()).strftime('%Y-%m-%d')
     with st.spinner('Fetching prices...'):
-        px, source = mk.prices(tuple([ticker, mk.MARKET] + ([bench_etf] if bench_etf else [])), start, end)
-    ev = mk.event_window(px, ticker, call_date, mk.MARKET) if px is not None else None
+        px, source = mk.prices(tuple([pt, mkt] + ([bench_etf] if bench_etf else [])), start, end)
+    ev = mk.event_window(px, pt, call_date, mkt) if px is not None else None
     if ev is None:
         ui.warn(f'Price data for <b>{esc(ticker)}</b> could not be loaded. {esc(source or "")} The sentiment results above are unaffected.')
     else:
-        ev_sec = mk.event_window(px, ticker, call_date, bench_etf) if bench_etf else None
+        ev_sec = mk.event_window(px, pt, call_date, bench_etf) if bench_etf else None
 
         def raw(ev, a, b, col):
             w = ev[(ev['day'] >= a) & (ev['day'] <= b)]
@@ -327,23 +330,23 @@ else:
 
         pre_car, day_car, week_car, month_car = mk.car(ev, -21, -1), mk.car(ev, 0, 1), mk.car(ev, 0, 5), mk.car(ev, 0, 21)
         stock_day, mkt_day = raw(ev, 0, 1, 'ret'), raw(ev, 0, 1, 'bench_ret')
-        noise, est_n, est_window = mk.estimation_sd(px, ticker, call_date, mk.MARKET)
+        noise, est_n, est_window = mk.estimation_sd(px, pt, call_date, mkt)
         t_stat = day_car / (noise * np.sqrt(2)) if np.isfinite(day_car) and noise and noise > 0 else np.nan
         size = abs(t_stat) if np.isfinite(t_stat) else np.nan
         sec_day = mk.car(ev_sec, 0, 1) if ev_sec is not None else np.nan
 
         st.markdown(f"""<div class="qm-steps">
 <div class="qm-step"><span class="n">THE QUESTION</span><h5>Did this call move the stock?</h5><p>We look at the stock from one month before to one month after the call.</p></div>
-<div class="qm-step"><span class="n">THE ADJUSTMENT</span><h5>Remove the market's move</h5><p>Each day we subtract the S&amp;P 500's return, so a market-wide rally or sell-off is not credited to the call. This is the {term("Abnormal return", "abnormal return")}.</p></div>
+<div class="qm-step"><span class="n">THE ADJUSTMENT</span><h5>Remove the market's move</h5><p>Each day we subtract the {mkt_label}'s return, so a market-wide rally or sell-off is not credited to the call. This is the {term("Abnormal return", "abnormal return")}.</p></div>
 <div class="qm-step"><span class="n">THE SIZE TEST</span><h5>Was the move unusual?</h5><p>We compare the move after the call with how much this stock normally wobbles against the market on an ordinary day.</p></div>
 <div class="qm-step"><span class="n">THE VIEW</span><h5>Does it match the tone?</h5><p>We check whether the stock moved in the direction the call's tone suggested.</p></div>
 </div>""", unsafe_allow_html=True)
         st.write('')
 
-        st.caption('All four figures are abnormal returns: the stock\'s move minus the S&P 500\'s move over the same days.')
+        st.caption('All four figures are abnormal returns: the stock\'s move minus the ' + mkt_label + '\'s move over the same days.')
         k = st.columns(4)
         cards = [('Month before (−21 to −1)', pre_car, 'Was the stock already rising or falling before the call?'),
-                 ('Reaction (day 0 to +1)', day_car, f'Stock itself <b>{stock_day:+.1%}</b>, S&amp;P 500 <b>{mkt_day:+.1%}</b>' if np.isfinite(stock_day) else 'Not enough trading days yet'),
+                 ('Reaction (day 0 to +1)', day_car, f'Stock itself <b>{stock_day:+.1%}</b>, {mkt_label} <b>{mkt_day:+.1%}</b>' if np.isfinite(stock_day) else 'Not enough trading days yet'),
                  ('First week (0 to +5)', week_car, 'Did the reaction hold, grow or fade?'),
                  ('First month (0 to +21)', month_car, 'The longer-run move after the call')]
         for col, (label, v, note) in zip(k, cards):
@@ -351,7 +354,7 @@ else:
                 ui.kpi(label, f'{v:+.1%}' if np.isfinite(v) else 'n/a', note,
                        color=ui.MUTED if not np.isfinite(v) else ui.OLIVE if v >= 0 else ui.ROSE)
 
-        plot = ev.assign(benchmark='vs. S&P 500 (SPY)')
+        plot = ev.assign(benchmark=f'vs. {mkt_label} ({mkt.replace(".TO", "")})')
         if ev_sec is not None:
             plot = pd.concat([plot, ev_sec.assign(benchmark=f'vs. {detected} ETF ({bench_etf})')])
         band = alt.Chart(pd.DataFrame({'x': [0], 'x2': [1]})).mark_rect(color=ui.GOLD, opacity=0.18).encode(x='x:Q', x2='x2:Q')
@@ -363,7 +366,7 @@ else:
             tooltip=['benchmark', 'day', alt.Tooltip('date:T', format='%d %b %Y'), alt.Tooltip('car:Q', format='+.2%', title='Cumulative')])
         zero = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color=ui.LINE).encode(y='y:Q')
         st.altair_chart(alt.layer(band, zero, line).properties(height=300), width='stretch')
-        st.caption('Read the line as a running score against the market: above zero = the stock did better than the S&P 500 since the start of that side of '
+        st.caption('Read the line as a running score against the market: above zero = the stock did better than the ' + mkt_label + ' since the start of that side of '
                    'the window; below zero = worse. Left of the shaded band: the month before the call. Right of it: the month after.')
 
         # our view
@@ -428,8 +431,8 @@ assuming independent, normally distributed daily abnormal returns (Brown &amp; W
             yh = lambda t: f'https://finance.yahoo.com/quote/{t}/history/'
             etf_line = f' and the sector ETF <a href="{yh(bench_etf)}" target="_blank">{bench_etf}</a>' if bench_etf else ''
             st.markdown(f"""<div class="qm-note" style="font-size:13.6px">
-<b>Data.</b> Daily adjusted closing prices for <a href="{yh(ticker)}" target="_blank">{esc(ticker)}</a>, the S&amp;P 500 ETF
-<a href="{yh(mk.MARKET)}" target="_blank">SPY</a>{etf_line}, from Yahoo Finance via the open-source
+<b>Data.</b> Daily adjusted closing prices for <a href="{yh(pt)}" target="_blank">{esc(pt)}</a>, the {mkt_label} ETF
+<a href="{yh(mkt)}" target="_blank">{mkt}</a>{etf_line}, from Yahoo Finance via the open-source
 <a href="https://github.com/ranaroussi/yfinance" target="_blank">yfinance</a> library (not affiliated with Yahoo; Yahoo's data is intended for personal use).
 Source used for this page: <b>{esc(source)}</b>. Click a ticker to check the prices on Yahoo Finance.<br><br>
 <b>Method</b> (market-adjusted model, MacKinlay 1997):<br>
@@ -443,7 +446,7 @@ Source used for this page: <b>{esc(source)}</b>. Click a ticker to check the pri
 <a href="https://github.com/ranadera/mma_earnings-call-sentiment/blob/main/market.py" target="_blank">market.py</a>; the sentences
 in "Our view" are fixed templates chosen by explicit rules (the size of t and whether the direction matches the tone signal).</div>""",
                         unsafe_allow_html=True)
-            dl = ev[['day', 'date', 'ret', 'bench_ret', 'abn_ret', 'car']].rename(columns={'ret': f'{ticker}_return', 'bench_ret': 'SPY_return'})
+            dl = ev[['day', 'date', 'ret', 'bench_ret', 'abn_ret', 'car']].rename(columns={'ret': f'{pt}_return', 'bench_ret': f'{mkt}_return'})
             st.download_button('Download the daily returns used (CSV)', dl.to_csv(index=False), file_name=f'event_window_{ticker}_{call_date}.csv', mime='text/csv')
         st.caption(f'Source: {source}. Abnormal return = stock return minus benchmark return each day. References at the end of the page.')
         reaction = {'day': day_car, 'pre': pre_car, 'week': week_car, 'size': size}

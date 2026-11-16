@@ -14,34 +14,49 @@ bench = da.benchmark()
 sector_map = da.sector_map()
 
 ui.hero('Stock reports', 'One-page profile of each stock',
-        'Business, sector, two years of price history against the S&amp;P 500, risk, and the latest valuation ratios, '
+        'Business, sector, two years of price history against the market (S&amp;P 500, or S&amp;P/TSX 60 for Toronto listings), risk, and the latest valuation ratios, '
         'with the sentiment of each earnings call marked on the price chart. Data is pulled live from Yahoo Finance.')
 
 known = sorted(bench['ticker'].unique())
 c1, c2 = st.columns([2, 1])
 pick = c1.selectbox('Stock', known + ['Other ticker...'], format_func=lambda t: t if t == 'Other ticker...' else f'{da.SHORT_NAMES.get(t, t)} ({t})')
-ticker = c2.text_input('Ticker', placeholder='e.g. BAC').strip().upper() if pick == 'Other ticker...' else pick
-if not ticker:
+typed = c2.text_input('Ticker', placeholder='e.g. BAC, RY or RCI.B',
+                      help='US tickers as listed (BAC). Toronto listings work as RCI.B, RCI-B.TO or RCI/B; the app finds the Yahoo Finance symbol.').strip().upper() if pick == 'Other ticker...' else pick
+if not typed:
     st.stop()
+ticker = typed
+if pick == 'Other ticker...':
+    with st.spinner(f'Looking up {typed}...'):
+        ticker = mk.resolve_ticker(typed)
+    if not ticker:
+        ui.warn(f'No price data found for <b>{esc(typed)}</b> under any of these Yahoo Finance symbols: '
+                f'{esc(", ".join(mk.ticker_candidates(typed)))}. Check the symbol on finance.yahoo.com.')
+        ui.footer()
+        st.stop()
+    if ticker != typed:
+        st.caption(f'Showing Yahoo Finance symbol {ticker} for "{typed}".')
+mkt, mkt_label = mk.benchmark_for(ticker)
 
 with st.spinner(f'Loading {ticker}...'):
     info = mk.company_info(ticker)
     end = pd.Timestamp.today().strftime('%Y-%m-%d')
     start = (pd.Timestamp.today() - pd.DateOffset(years=2)).strftime('%Y-%m-%d')
-    px, source = mk.prices((ticker, mk.MARKET), start, end)
+    px, source = mk.prices((ticker, mkt), start, end)
 
 if px is None or ticker not in px.columns or px[ticker].dropna().empty:
     ui.warn(f'Price data for <b>{esc(ticker)}</b> could not be loaded. {esc(source or "")} Check the ticker or try again in a minute.')
     ui.footer()
     st.stop()
 
-s = mk.stock_stats(px, ticker)
+s = mk.stock_stats(px, ticker, mkt)
+cur = info.get('currency') or ('CAD' if ticker.endswith(('.TO', '.V')) else 'USD')
+sym = 'C$' if cur == 'CAD' else '$' if cur == 'USD' else cur + ' '
 name = info.get('longName') or da.SHORT_NAMES.get(ticker, ticker)
 sector = sector_map.get(ticker)
 is_bank = sector == 'Bank'
 st.markdown(f'<div class="qm-company"><h3>{esc(name)}</h3><div class="meta">'
             + ' · '.join(esc(x) for x in [ticker, info.get('sector'), info.get('industry'), f'Our sector group: {sector}' if sector else None,
-                                          f'Close {s["as_of"]:%d %b %Y}: ${s["price"]:,.2f}'] if x)
+                                          f'Close {s["as_of"]:%d %b %Y}: {sym}{s["price"]:,.2f} ({cur})'] if x)
             + '</div></div>', unsafe_allow_html=True)
 
 ui.section('01 · BUSINESS', 'What the company does')
@@ -73,13 +88,14 @@ for row in (ratios[:4], ratios[4:]):
 
 ui.section('03 · PRICE HISTORY', 'Two years against the market',
            'Both lines start at 100. Dashed lines mark earnings calls in our data set, coloured by their sentiment signal.')
-p = px[[ticker, mk.MARKET]].dropna()
+p = px[[ticker, mkt]].dropna()
 idx = (p / p.iloc[0] * 100).reset_index().melt(p.index.name or 'index', var_name='series', value_name='value')
 idx = idx.rename(columns={idx.columns[0]: 'date'})
-idx['series'] = idx['series'].map({ticker: name, mk.MARKET: 'S&P 500 (SPY)'})
+mkt_name = f'{mkt_label} ({mkt.replace(".TO", "")})'
+idx['series'] = idx['series'].map({ticker: name, mkt: mkt_name})
 lines = alt.Chart(idx).mark_line(strokeWidth=2).encode(
     x=alt.X('date:T', title=None), y=alt.Y('value:Q', title='Indexed to 100', scale=alt.Scale(zero=False)),
-    color=alt.Color('series:N', scale=alt.Scale(domain=[name, 'S&P 500 (SPY)'], range=[ui.AZURE, '#9AA5B8'])),
+    color=alt.Color('series:N', scale=alt.Scale(domain=[name, mkt_name], range=[ui.AZURE, '#9AA5B8'])),
     tooltip=['series', alt.Tooltip('date:T', format='%d %b %Y'), alt.Tooltip('value:Q', format='.1f')])
 mycalls = bench[(bench['ticker'] == ticker) & (bench['call_date'] >= p.index[0])]
 layers = [lines]
@@ -92,13 +108,13 @@ st.altair_chart(alt.layer(*layers).resolve_scale(color='independent').properties
 ui.section('04 · RISK', 'Return and risk over the last 12 months')
 r = st.columns(4)
 with r[0]:
-    ui.kpi('1-year return', f'{s["ret_1y"]:+.1%}', f'S&amp;P 500: {s["mkt_1y"]:+.1%}', color=ui.OLIVE if s['ret_1y'] >= s['mkt_1y'] else ui.ROSE)
+    ui.kpi('1-year return', f'{s["ret_1y"]:+.1%}', f'{mkt_label}: {s["mkt_1y"]:+.1%}', color=ui.OLIVE if s['ret_1y'] >= s['mkt_1y'] else ui.ROSE)
 with r[1]:
     ui.kpi(term('Volatility'), f'{s["vol_1y"]:.1%}', f'Last 30 days: <b>{s["vol_30d"]:.1%}</b>', color=ui.PUMPKIN)
 with r[2]:
     ui.kpi(term('Maximum drawdown'), f'{s["max_dd"]:.1%}', 'Largest fall from a peak', color=ui.ROSE)
 with r[3]:
-    ui.kpi('52-week range', f'${s["low"]:,.0f} – ${s["high"]:,.0f}', f'Now ${s["price"]:,.2f}', color=ui.SKY)
+    ui.kpi('52-week range', f'{sym}{s["low"]:,.0f} – {sym}{s["high"]:,.0f}', f'Now {sym}{s["price"]:,.2f}', color=ui.SKY)
 
 ui.section('05 · SENTIMENT', 'Earnings call sentiment for this stock')
 mine = bench[bench['ticker'] == ticker].sort_values('call_date')

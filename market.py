@@ -92,6 +92,61 @@ def company_info(ticker):
         return {}
 
 
+TSX_BENCH = 'XIU.TO'
+
+
+def ticker_candidates(raw):
+    """Yahoo Finance spellings to try for a ticker typed by a user, e.g. RCI.B or RCI/B -> RCI-B.TO (Toronto, class B)."""
+    t = raw.strip().upper().replace(' ', '')
+    for suffix in ('CN', 'CT'):  # Bloomberg-style Canadian suffixes
+        if t.endswith(suffix) and len(t) > len(suffix) + 1 and not t.endswith('.' + suffix):
+            t = t[:-len(suffix)] + '.TO'
+    t = t.replace('/', '.')
+    cands = [t]
+    if t.endswith(('.TO', '.V')):
+        stem, ex = t.rsplit('.', 1)
+        cands.append(stem.replace('.', '-') + '.' + ex)
+    else:
+        cands += [t.replace('.', '-'), t.replace('.', '-') + '.TO']
+    out = []
+    for c in cands:
+        if c and c not in out:
+            out.append(c)
+    return out
+
+
+@st.cache_data(ttl=24 * 3600, show_spinner=False)
+def _has_prices(symbol):
+    import yfinance as yf
+    h = yf.Ticker(symbol).history(period='1mo')
+    if h is None or h.empty:
+        raise LookupError(symbol)
+    return True
+
+
+def resolve_ticker(raw):
+    """First Yahoo Finance symbol with price data for what the user typed; None if none works."""
+    if os.path.exists(LOCAL_PRICES):
+        cols = set(pd.read_csv(LOCAL_PRICES, nrows=0).columns)
+        for c in ticker_candidates(raw):
+            if c in cols:
+                return c
+    for c in ticker_candidates(raw):
+        try:
+            if _has_prices(c):
+                return c
+        except Exception:
+            continue
+    return None
+
+
+def benchmark_for(symbol):
+    """Market benchmark in the stock's home market: S&P/TSX 60 (XIU) for Toronto listings, S&P 500 (SPY) otherwise."""
+    if str(symbol).upper().endswith(('.TO', '.V')):
+        return TSX_BENCH, 'S&P/TSX 60'
+    return MARKET, 'S&P 500'
+
+
 def yahoo_sector(ticker):
     """Map Yahoo Finance's sector and industry to our sector groups (Bank, Tech) or return Yahoo's sector name."""
     info = company_info(ticker) if ticker else {}

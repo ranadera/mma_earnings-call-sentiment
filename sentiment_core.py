@@ -22,6 +22,97 @@ SPEAKER_RE = re.compile(r"^(Q - |A - )?([A-Z][\w.'\- ]+?)\s*(\{BIO \d+ <GO>\})?$
 
 vader = SentimentIntensityAnalyzer()
 
+# Company names as they appear in transcripts (speaker titles, operator welcome, disclaimers) -> Yahoo Finance ticker.
+# Used only when the transcript itself does not state the ticker (e.g. transcripts posted on a company's investor-relations site).
+COMPANY_TICKERS = {
+    'JPMorgan Chase': 'JPM', 'JPMorganChase': 'JPM', 'JPMorgan': 'JPM', 'Bank of America': 'BAC', 'Citigroup': 'C', 'Citi': 'C', 'Citizens': 'CFG',
+    'Wells Fargo': 'WFC', 'U.S. Bancorp': 'USB', 'US Bancorp': 'USB', 'PNC Financial': 'PNC', 'PNC': 'PNC', 'Goldman Sachs': 'GS',
+    'Morgan Stanley': 'MS', 'Truist': 'TFC', 'Capital One': 'COF', 'Citizens Financial': 'CFG', 'M&T Bank': 'MTB',
+    'Fifth Third': 'FITB', 'KeyCorp': 'KEY', 'Regions Financial': 'RF', 'Huntington Bancshares': 'HBAN', 'Zions': 'ZION',
+    'Comerica': 'CMA', 'SVB Financial': 'SIVB', 'Silicon Valley Bank': 'SIVB', 'Western Alliance': 'WAL',
+    'Royal Bank of Canada': 'RY', 'Toronto-Dominion': 'TD', 'TD Bank': 'TD', 'Bank of Nova Scotia': 'BNS', 'Scotiabank': 'BNS',
+    'Bank of Montreal': 'BMO', 'BMO Financial': 'BMO', 'CIBC': 'CM', 'Canadian Imperial Bank': 'CM', 'Rogers Communications': 'RCI.B',
+    'Apple': 'AAPL', 'Microsoft': 'MSFT', 'Amazon': 'AMZN', 'Alphabet': 'GOOGL', 'Google': 'GOOGL', 'Meta Platforms': 'META',
+    'NVIDIA': 'NVDA', 'Advanced Micro Devices': 'AMD', 'AMD': 'AMD', 'Broadcom': 'AVGO', 'Oracle': 'ORCL', 'Qualcomm': 'QCOM',
+    'KLA': 'KLAC', 'Sandisk': 'SNDK', 'Western Digital': 'WDC', 'CoreWeave': 'CRWV', 'Palo Alto Networks': 'PANW',
+    'Monolithic Power': 'MPWR', 'Intel': 'INTC', 'Tesla': 'TSLA', 'Netflix': 'NFLX', 'Salesforce': 'CRM',
+}
+MONTHS = 'January|February|March|April|May|June|July|August|September|October|November|December'
+
+
+def _norm(name):
+    return re.sub(r'[^a-z0-9]', '', name.lower())
+
+
+def ticker_from_company(name):
+    """Ticker for a company name, matching the longest known alias inside it; '' if none matches."""
+    n, spaced = _norm(name), ' ' + re.sub(r'[^a-z0-9]+', ' ', name.lower()) + ' '
+    # long aliases may match inside a run-together name (JPMorganChase); short ones only as whole words (AMD, not Amdocs)
+    hits = [(len(_norm(a)), t) for a, t in COMPANY_TICKERS.items()
+            if (len(_norm(a)) >= 6 and _norm(a) in n) or (' ' + re.sub(r'[^a-z0-9]+', ' ', a.lower()).strip() + ' ') in spaced]
+    return max(hits)[1] if hits else ''
+
+
+SEPARATOR_RE = re.compile(r'^\.{10,}$')
+TITLE_RE = re.compile(r'^(?P<title>[^,]{2,90}),\s*(?P<firm>.+?)(?:\s+(?P<qa>[QA]))?$')
+
+
+def is_callstreet(lines):
+    return 'QUESTION AND ANSWER SECTION' in lines or 'MANAGEMENT DISCUSSION SECTION' in lines
+
+
+def parse_callstreet(lines):
+    """Transcripts in the CallStreet/FactSet layout used on many investor-relations sites: a dotted rule, the speaker's
+    name on one line, 'Title, Company' on the next (with Q or A in the Q&A), then the text. Operator lines are inline."""
+    out, section, speaker, role, buf = [], 'presentation', None, None, []
+    after_rule = False
+
+    def flush():
+        if speaker and buf:
+            out.append([section, speaker, role, ' '.join(buf)])
+
+    i = 0
+    while i < len(lines):
+        l = lines[i]
+        if l == 'Disclaimer':
+            break
+        if SEPARATOR_RE.match(l):
+            after_rule = True
+            i += 1
+            continue
+        if after_rule and l.isdigit():          # page number between the rule and the next speaker
+            i += 1
+            continue
+        if l in ('MANAGEMENT DISCUSSION SECTION', 'QUESTION AND ANSWER SECTION'):
+            flush(); buf, speaker = [], None
+            section = 'qa' if l.startswith('QUESTION') else 'presentation'
+        elif l.startswith('Operator:'):
+            flush(); speaker, role, buf = 'Operator', 'operator', [l.split(':', 1)[1].strip()]
+        elif (after_rule or (i > 0 and lines[i - 1].isdigit())) and i + 1 < len(lines) and TITLE_RE.match(lines[i + 1]) \
+                and 1 <= len(l.split()) <= 6 and not l.endswith(('.', '?', ':')) and not any(ch.isdigit() for ch in l):
+            m = TITLE_RE.match(lines[i + 1])
+            new_role = 'analyst' if m.group('qa') == 'Q' or m.group('title').strip().startswith('Analyst') else 'management'
+            if not (l == speaker and new_role == role):  # a page break repeats the header: keep one turn
+                flush(); buf = []
+            speaker, role = l, new_role
+            i += 2
+            after_rule = False
+            continue
+        elif speaker:
+            buf.append(l)
+        after_rule = False
+        i += 1
+    flush()
+    return out
+
+
+def callstreet_meta(lines):
+    firms = [TITLE_RE.match(lines[i + 1]).group('firm') for i in range(len(lines) - 1)
+             if TITLE_RE.match(lines[i + 1]) and not lines[i + 1].startswith('Analyst')
+             and (TITLE_RE.match(lines[i + 1]).group('qa') in (None, 'A'))]
+    company = max(set(firms), key=firms.count) if firms else ''
+    return company
+
 
 def lm_path(path='LM_MasterDictionary.csv'):
     """Local copy of the Loughran-McDonald dictionary if present, otherwise the copy shipped with pysentiment2."""
@@ -71,6 +162,25 @@ def get_meta(raw):
     if not meta['ticker'] and m:
         meta['ticker'] = m.group(4)
         meta['call_date'] = '20' + m.group(3) + '-' + m.group(1) + '-' + m.group(2)
+    if not meta['ticker']:
+        # No ticker in the text (e.g. investor-relations transcripts): find the company name, then look up its ticker.
+        lines = [l.strip() for l in raw.split('\n') if l.strip()]
+        names = []
+        if is_callstreet(lines):
+            names.append(callstreet_meta(lines))
+        w = re.search(r"[Ww]elcome to (?:the )?(.{2,60}?)(?:'s|’s)?\s+(?:First|Second|Third|Fourth|Q[1-4]|Fiscal|Full[- ]Year|\d{4})", raw[:6000])
+        if w:
+            names.append(w.group(1))
+        for name in names:
+            t = ticker_from_company(name) if name else ''
+            if t:
+                meta['ticker'] = t
+                meta['company'] = meta['company'] or name.strip()
+                break
+    if not meta['call_date']:
+        d = re.search(rf'({MONTHS})\s+(\d{{1,2}}),\s+(\d{{4}})', raw[:3000])
+        if d:
+            meta['call_date'] = pd.to_datetime(' '.join(d.groups())).strftime('%Y-%m-%d')
     return meta
 
 
@@ -152,6 +262,56 @@ def parse_plain(lines):
     return [['presentation', 'Full text', 'management', text.replace('\n', ' ')]]
 
 
+LABEL_RE = re.compile(r"^(?P<name>OPERATOR|[A-Z][A-Z.'\-]+(?: [A-Z][A-Z.'\-]+){1,4}):\s*(?P<text>.*)$")
+QUESTION_RE = re.compile(r'(first|next|following|last) question|question (comes|will come|is from|today)', re.I)
+END_RE = re.compile(r'^(Certain statements in this|Forward[- ]Looking Statements|Disclaimer\b|IMPORTANT DISCLOSURES)', re.I)
+
+
+def is_caps_labels(lines):
+    labels = [m.group('name') for l in lines for m in [LABEL_RE.match(l)] if m]
+    return 'OPERATOR' in labels and len(set(labels)) >= 3 and len(labels) >= 8
+
+
+def parse_caps_labels(lines):
+    """Company-published transcripts where each turn starts 'JANE FRASER: ...' (e.g. Citi). Management is taken from the
+    header ('Host' / 'Speakers' lists) and anyone who speaks before the first analyst; page headers repeated on every page are dropped."""
+    from collections import Counter
+    counts = Counter(lines)
+    body = [l for l in lines if not (counts[l] >= 3 and len(l) < 100) and not l.lower().startswith('copyright')]
+    first = next((i for i, l in enumerate(body) if LABEL_RE.match(l)), 0)
+    mgmt = {re.split(r',', l)[0].strip().upper() for l in body[:first] if ',' in l and len(l.split(',')[0].split()) in (2, 3, 4)}
+    out, section, speaker, role, buf, qa_started = [], 'presentation', None, None, [], False
+
+    def flush():
+        if speaker and buf:
+            out.append([section, speaker, role, ' '.join(buf)])
+
+    for l in body[first:]:
+        if END_RE.match(l):
+            break
+        m = LABEL_RE.match(l)
+        if m:
+            flush()
+            name = m.group('name').strip()
+            if name == 'OPERATOR':
+                speaker, role = 'Operator', 'operator'
+            else:
+                asked = bool(out and out[-1][1] == 'Operator' and QUESTION_RE.search(out[-1][3]))
+                is_mgmt = name in mgmt or (not qa_started and not asked)
+                if not is_mgmt and not qa_started:
+                    qa_started, section = True, 'qa'
+                    if out and out[-1][1] == 'Operator':
+                        out[-1][0] = 'qa'
+                if is_mgmt and name not in mgmt and not qa_started:
+                    mgmt.add(name)
+                speaker, role = name.title(), 'management' if (name in mgmt) else 'analyst'
+            buf = [m.group('text')]
+        elif speaker:
+            buf.append(l)
+    flush()
+    return out
+
+
 def parse(raw):
     lines = clean_lines(raw)
     if 'CORPORATE SPEAKERS:' in lines and 'PRESENTATION:' in lines:
@@ -160,6 +320,10 @@ def parse(raw):
         fmt, rows = 'LSEG (inline speakers)', parse_inline(lines)
     elif 'Questions And Answers' in lines and any('<GO>}' in l for l in lines):
         fmt, rows = 'Bloomberg', parse_bloomberg(lines)
+    elif is_callstreet(lines) and parse_callstreet(lines):
+        fmt, rows = 'Investor-relations (CallStreet layout)', parse_callstreet(lines)
+    elif is_caps_labels(lines) and parse_caps_labels(lines):
+        fmt, rows = 'Investor-relations (named speakers)', parse_caps_labels(lines)
     else:
         fmt, rows = 'Plain text (speakers not identified)', parse_plain(lines)
     turns = pd.DataFrame(rows, columns=['section', 'speaker', 'role', 'text'])
